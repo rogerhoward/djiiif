@@ -65,3 +65,55 @@ In a Django template:
 ### callable-based profiles
 
 You can also use a callable to dynamically generate a URL. The callable will receive the parent `IIIFFieldFile` (a subclass of `ImageFieldFile`) as its sole parameter, `parent`, and must return a `dict` with the following keys: host, region, size, rotation, quality, and format. Using a callable allows you to implement more complex logic in your profile, including the ability to access the original file's name, width, and height.
+
+An example of a callable-based profile named `square` is below, used to generate a square-cropped image.
+
+
+```python
+def squareProfile(original):
+    width, height = original.width, original.height
+
+    if width > height:
+        x = int((width - height) / 2)
+        y = 0
+        w = height
+        h = height
+        region = '{},{},{},{}'.format(x,y,w,h)
+    elif width < height:
+        x = 0
+        y = int((height - width) / 2)
+        w = width
+        h = width
+        region = '{},{},{},{}'.format(x,y,w,h)
+    else:
+        region = 'full'
+
+    spec = {'host': IIIF_HOST, 
+        'region': region, 
+        'size': '256,256',
+        'rotation': '0',
+        'quality': 'default',
+        'format': 'jpg'}
+    return spec
+```
+
+```python
+IIIF_PROFILES = {
+    'thumbnail':
+        {'host': IIIF_HOST, 
+        'region': 'full', 
+        'size': '150,',
+        'rotation': '0',
+        'quality': 'default',
+        'format': 'jpg'},
+    'preview':
+        {'host': IIIF_HOST, 
+        'region': 'full', 
+        'size': '600,',
+        'rotation': '0',
+        'quality': 'default',
+        'format': 'jpg'},
+    'square': squareProfile
+}
+
+ ```
