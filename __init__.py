@@ -16,7 +16,6 @@ def urljoin(parts):
 
 class IIIFObject(object):
     def __init__(self, parent):
-
         for name in settings.IIIF_PROFILES:
 
             profile = settings.IIIF_PROFILES[name]
@@ -28,6 +27,9 @@ class IIIFObject(object):
 
             url = urljoin([iiif['host'], parent.name, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
             setattr(self, name, url)
+
+        setattr(self, 'url', urljoin([settings.IIIF_HOST, parent.name]))
+
 
 
 class IIIFFieldFile(ImageFieldFile):

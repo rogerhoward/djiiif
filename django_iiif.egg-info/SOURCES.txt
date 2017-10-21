@@ -1,8 +1,0 @@
-LICENSE.txt
-MANIFEST.in
-README
-setup.py
-django_iiif.egg-info/PKG-INFO
-django_iiif.egg-info/SOURCES.txt
-django_iiif.egg-info/dependency_links.txt
-django_iiif.egg-info/top_level.txt
