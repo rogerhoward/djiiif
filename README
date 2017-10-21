@@ -1,14 +1,14 @@
-# django-iiif
+# djiiif
 
-django-iiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
+djiiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
 
-## Why Django-IIIF and not ImageKit
+## Why djiiif and not ImageKit
 
 I love ImageKit, but I recently worked on a project where we already had IIIF handling image derivative generation and serving, and Django ImageKit just got in the way. I wanted to still register my source images with Django, but serve them through an [IIIF server](https://github.com/loris-imageserver/loris), and this is what I came up with. I have lots of ideas for improvements here, but the initial release is just a santized version of what I used on my most recent project.
 
 ## Installation
 
-`pip install django-iiif`
+`pip install djiiif`
 
 ## Examples
 

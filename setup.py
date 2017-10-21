@@ -6,14 +6,14 @@ import os
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
-    name='django_iiif',
+    name='djiiif',
     version='0.11',
     packages=find_packages(),
     include_package_data=True,
     license='BSD License',  # example license
-    description='Simple Django-IIIF integration.',
-    long_description='django-iiif is a package designed to make integrating the IIIF Image API easier by extending Django\'s ImageField',
-    url='https://github.com/rogerhoward/django-iiif/',
+    description='Simple IIIF integration for Django.',
+    long_description='djiiif is a package designed to make integrating the IIIF Image API easier by extending Django\'s ImageField',
+    url='https://github.com/rogerhoward/djiiif/',
     author='Roger Howard',
     author_email='rogerhoward+django@gmail.com',
     classifiers=[
