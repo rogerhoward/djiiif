@@ -31,7 +31,6 @@ class IIIFObject(object):
         setattr(self, 'url', urljoin([settings.IIIF_HOST, parent.name]))
 
 
-
 class IIIFFieldFile(ImageFieldFile):
     @property
     def iiif(self):
@@ -42,7 +41,6 @@ class IIIFFieldFile(ImageFieldFile):
 
 
 class IIIFField(ImageField):
-
     attr_class = IIIFFieldFile
 
     def __init__(self, *args, **kwargs):
