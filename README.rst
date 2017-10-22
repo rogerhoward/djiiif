@@ -115,13 +115,25 @@ to generate a square-cropped image.
             'format': 'jpg'}
         return spec
 
-| \`\`\`python
-| IIIF\_PROFILES = {
-| ‘thumbnail’:
-| {‘host’: IIIF\_HOST,
-| ‘region’: ‘full’,
-| ‘size’: ‘150,’,
-| ‘rotation’: ‘0’,
+.. code:: python
+
+    IIIF_PROFILES = {
+        'thumbnail':
+            {'host': IIIF_HOST, 
+            'region': 'full', 
+            'size': '150,',
+            'rotation': '0',
+            'quality': 'default',
+            'format': 'jpg'},
+        'preview':
+            {'host': IIIF_HOST, 
+            'region': 'full', 
+            'size': '600,',
+            'rotation': '0',
+            'quality': 'default',
+            'format': 'jpg'},
+        'square': squareProfile
+    }
 
 .. _IIIF Image API: http://iiif.io/api/image/2.1/
 .. _IIIF server: https://github.com/loris-imageserver/loris
