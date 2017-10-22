@@ -17,7 +17,7 @@ First, let's setup a new field (or convert an existing ImageField):
 
 `models.py`
 ```python
-from django_iiif import IIIFField
+from djiiif import IIIFField
 
 original = IIIFField()
 ```
