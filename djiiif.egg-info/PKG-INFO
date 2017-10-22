@@ -1,0 +1,24 @@
+Metadata-Version: 1.1
+Name: djiiif
+Version: 0.11
+Summary: Simple IIIF integration for Django.
+Home-page: https://github.com/rogerhoward/djiiif/
+Author: Roger Howard
+Author-email: rogerhoward+django@gmail.com
+License: BSD License
+Description-Content-Type: UNKNOWN
+Description: djiiif is a package designed to make integrating the IIIF Image API easier by extending Django's ImageField
+Platform: UNKNOWN
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 1.11
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
