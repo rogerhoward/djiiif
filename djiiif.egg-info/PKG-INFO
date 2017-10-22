@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: djiiif
-Version: 0.11
+Version: 0.12
 Summary: Simple IIIF integration for Django.
 Home-page: https://github.com/rogerhoward/djiiif/
 Author: Roger Howard
