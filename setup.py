@@ -9,6 +9,7 @@ setup(
     name='djiiif',
     version='0.11',
     packages=find_packages(),
+    install_requires=['Django'],
     include_package_data=True,
     license='BSD License',  # example license
     description='Simple IIIF integration for Django.',
