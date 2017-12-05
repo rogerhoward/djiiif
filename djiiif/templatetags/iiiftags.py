@@ -9,3 +9,4 @@ register = template.Library()
 @register.simple_tag
 def iiif(imagefield, profile):
     return(getattr(imagefield, profile))
+
