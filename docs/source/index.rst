@@ -20,7 +20,6 @@ Indices and tables
 * :ref:`search`
 
 
-
 djiiif
 ======
 
@@ -158,5 +157,47 @@ to generate a square-cropped image.
         'square': squareProfile
     }
 
+
+IIIF Template Tag
+~~~~~~~~~~~~~~~~~
+
+An alternate way to access IIIF URLs for your IIIFField is via the `iiif` template tag.
+
+First, add ``djiiif`` to your ``INSTALLED_APPS``:
+
+.. code:: python
+
+    INSTALLED_APPS = [
+        ...
+        'djiiif'
+    ]
+
+
+Next, load our template tag library `iiiftags` in your template:
+
+.. code:: python
+
+    {% load iiiftags %}
+
+
+Finally, use it in a template:
+
+.. code:: python
+
+    {% iiif asset.original 'thumbnail' %}
+
+
+The first parameter (asset.original) is a reference to an IIIFField instance.
+
+The second parameter ('thumbnail') is the name of one of your IIIF profiles.
+
+This tag syntax is effectively the same as:
+
+.. code:: python
+
+    {{ asset.original.iiif.thumbnail }}
+
+
 .. _IIIF Image API: http://iiif.io/api/image/2.1/
 .. _IIIF server: https://github.com/loris-imageserver/loris
+

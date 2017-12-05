@@ -144,6 +144,7 @@ An alternate way to access IIIF URLs for your IIIFField is via the `iiif` templa
 First, add ``djiiif`` to your ``INSTALLED_APPS``:
 
 .. code:: python
+
     INSTALLED_APPS = [
         ...
         'djiiif'
@@ -153,12 +154,14 @@ First, add ``djiiif`` to your ``INSTALLED_APPS``:
 Next, load our template tag library `iiiftags` in your template:
 
 .. code:: python
+
     {% load iiiftags %}
 
 
 Finally, use it in a template:
 
 .. code:: python
+
     {% iiif asset.original 'thumbnail' %}
 
 
@@ -169,6 +172,7 @@ The second parameter ('thumbnail') is the name of one of your IIIF profiles.
 This tag syntax is effectively the same as:
 
 .. code:: python
+
     {{ asset.original.iiif.thumbnail }}
 
 
