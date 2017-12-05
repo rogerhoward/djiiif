@@ -15,6 +15,9 @@ register = template.Library()
 
 @register.simple_tag
 def iiif(imagefield, profile):
+    """
+    Returns an IIIF URL based on an IIIFField and a profile stored in IIIF_PROFILES.
+    """
     try:
         return getattr(imagefield.iiif, profile)
     except AttributeError:
