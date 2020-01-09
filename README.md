@@ -1,39 +1,22 @@
-<<<<<<< HEAD
 # django-iiif
 
 django-iiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
 
 ## Why Django-IIIF and not ImageKit
-=======
-# djiiif
-
-djiiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
-
-## Why djiiif and not ImageKit
->>>>>>> development
 
 I love ImageKit, but I recently worked on a project where we already had IIIF handling image derivative generation and serving, and Django ImageKit just got in the way. I wanted to still register my source images with Django, but serve them through an [IIIF server](https://github.com/loris-imageserver/loris), and this is what I came up with. I have lots of ideas for improvements here, but the initial release is just a santized version of what I used on my most recent project.
 
 ## Installation
 
-<<<<<<< HEAD
-`pip install django-iiif`
-=======
 `pip install djiiif`
->>>>>>> development
 
 ## Examples
 
 First, let's setup a new field (or convert an existing ImageField):
 
-
 `models.py`
 ```python
-<<<<<<< HEAD
-from django_iiif import IIIFField
-=======
 from djiiif import IIIFField
->>>>>>> development
 
 original = IIIFField()
 ```
@@ -77,7 +60,6 @@ In a Django template:
 <img src="{{ instance.original.iiif.thumbnail }}">
 ```
 
-<<<<<<< HEAD
 As of version 0.15, we can also generate a IIIF info.json URL:
 
 ```
@@ -85,8 +67,6 @@ print(instance.original.iiif.info)
 > http://server/uploads/filename.jpg/info.json
 ```
 
-=======
->>>>>>> development
 
 ### callable-based profiles
 
@@ -141,10 +121,6 @@ IIIF_PROFILES = {
         'format': 'jpg'},
     'square': squareProfile
 }
-
-<<<<<<< HEAD
- ```
-=======
  ```
 
 ### IIIF Template Tag
@@ -183,4 +159,3 @@ This tag syntax is effectively the same as:
 ```
 {{ asset.original.iiif.thumbnail }}
 ```
->>>>>>> development
