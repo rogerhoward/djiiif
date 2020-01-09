@@ -20,17 +20,19 @@ class IIIFObject(object):
         # for each profile defined in settings
         for name in settings.IIIF_PROFILES:
 
-            identifier = parent.name.replace("/", "%2F")
+            if not parent.name:
+                setattr(self, name, "")
+            else:
+                identifier = parent.name.replace("/", "%2F")
+                profile = settings.IIIF_PROFILES[name]
 
-            profile = settings.IIIF_PROFILES[name]
+                if type(profile) is dict:
+                    iiif = profile
+                elif callable(profile):
+                    iiif = profile(parent)
 
-            if type(profile) is dict:
-                iiif = profile
-            elif callable(profile):
-                iiif = profile(parent)
-
-            url = urljoin([iiif['host'], identifier, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
-            setattr(self, name, url)
+                url = urljoin([iiif['host'], identifier, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
+                setattr(self, name, url)
 
         # Add info.json URL
         url = urljoin([iiif['host'], identifier, "info.json"])
