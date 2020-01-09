@@ -61,6 +61,13 @@ In a Django template:
 <img src="{{ instance.original.iiif.thumbnail }}">
 ```
 
+As of version 0.14, we can also generate a IIIF info.json URL:
+
+```
+print(instance.original.iiif.info)
+> http://server/uploads/filename.jpg/info.json
+```
+
 
 ### callable-based profiles
 

@@ -17,6 +17,7 @@ def urljoin(parts):
 class IIIFObject(object):
     def __init__(self, parent):
 
+        # for each profile defined in settings
         for name in settings.IIIF_PROFILES:
 
             profile = settings.IIIF_PROFILES[name]
@@ -28,6 +29,9 @@ class IIIFObject(object):
 
             url = urljoin([iiif['host'], parent.name, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
             setattr(self, name, url)
+
+        # Add info.json URL
+        setattr(self, "info", urljoin([iiif['host'], parent.name, "info.json"))
 
 
 class IIIFFieldFile(ImageFieldFile):
