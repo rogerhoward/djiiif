@@ -1,14 +1,14 @@
-# django-iiif
+# djiiif
 
-django-iiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
+djiiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
 
-## Why Django-IIIF and not ImageKit
+## Why djiiif and not ImageKit
 
 I love ImageKit, but I recently worked on a project where we already had IIIF handling image derivative generation and serving, and Django ImageKit just got in the way. I wanted to still register my source images with Django, but serve them through an [IIIF server](https://github.com/loris-imageserver/loris), and this is what I came up with. I have lots of ideas for improvements here, but the initial release is just a santized version of what I used on my most recent project.
 
 ## Installation
 
-`pip install django-iiif`
+`pip install djiiif`
 
 ## Examples
 
@@ -17,13 +17,12 @@ First, let's setup a new field (or convert an existing ImageField):
 
 `models.py`
 ```python
-from django_iiif import IIIFField
+from djiiif import IIIFField
 
 original = IIIFField()
 ```
 
 Second, configure the relevant settings.
-
 
 `settings.py`
 ```python
@@ -67,7 +66,6 @@ As of version 0.15, we can also generate a IIIF info.json URL:
 print(instance.original.iiif.info)
 > http://server/uploads/filename.jpg/info.json
 ```
-
 
 ### callable-based profiles
 
@@ -122,5 +120,41 @@ IIIF_PROFILES = {
         'format': 'jpg'},
     'square': squareProfile
 }
-
  ```
+
+### IIIF Template Tag
+
+An alternate way to access IIIF URLs for your IIIFField is via the `iiif` template tag.
+
+First, add `djiiif` to your `INSTALLED_APPS`:
+
+
+```
+INSTALLED_APPS = [
+    ...
+    'djiiif'
+]
+ ```
+
+
+Next, load our template tag library `iiiftags` in your template:
+
+```
+{% load iiiftags %}
+```
+
+Finally, use it in a template:
+
+```
+{% iiif asset.original 'thumbnail' %}
+```
+
+The first parameter (asset.original) is a reference to an IIIFField instance.
+
+The second parameter ('thumbnail') is the name of one of your IIIF profiles.
+
+This tag syntax is effectively the same as:
+
+```
+{{ asset.original.iiif.thumbnail }}
+```
