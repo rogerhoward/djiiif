@@ -2,8 +2,11 @@
 from django.db.models import ImageField
 from django.db.models.fields.files import ImageFieldFile
 from django.conf import settings
+<<<<<<< HEAD
+=======
 from django import template
 
+>>>>>>> development
 
 
 def urljoin(parts):
@@ -18,8 +21,17 @@ def urljoin(parts):
 
 class IIIFObject(object):
     def __init__(self, parent):
+<<<<<<< HEAD
+
+        # for each profile defined in settings
         for name in settings.IIIF_PROFILES:
 
+            identifier = parent.name.replace("/", "%2F")
+
+=======
+        for name in settings.IIIF_PROFILES:
+
+>>>>>>> development
             profile = settings.IIIF_PROFILES[name]
 
             if type(profile) is dict:
@@ -27,10 +39,19 @@ class IIIFObject(object):
             elif callable(profile):
                 iiif = profile(parent)
 
+<<<<<<< HEAD
+            url = urljoin([iiif['host'], identifier, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
+            setattr(self, name, url)
+
+        # Add info.json URL
+        url = urljoin([iiif['host'], identifier, "info.json"])
+        setattr(self, "info", url)
+=======
             url = urljoin([iiif['host'], parent.name, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
             setattr(self, name, url)
 
         setattr(self, 'url', urljoin([settings.IIIF_HOST, parent.name]))
+>>>>>>> development
 
 
 class IIIFFieldFile(ImageFieldFile):
@@ -43,6 +64,10 @@ class IIIFFieldFile(ImageFieldFile):
 
 
 class IIIFField(ImageField):
+<<<<<<< HEAD
+
+=======
+>>>>>>> development
     attr_class = IIIFFieldFile
 
     def __init__(self, *args, **kwargs):
