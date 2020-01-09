@@ -6,14 +6,15 @@ import os
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
-    name='django-iiif',
-    version='0.1',
+    name='djiiif',
+    version='0.14',
     packages=find_packages(),
+    install_requires=['Django'],
     include_package_data=True,
     license='BSD License',  # example license
-    description='Simple Django-IIIF integration.',
-    long_description='django-iiif is a package designed to make integrating the IIIF Image API easier by extending Django\'s ImageField',
-    url='https://github.com/rogerhoward/django-iiif/',
+    description='Simple IIIF integration for Django.',
+    long_description='djiiif is a package designed to make integrating the IIIF Image API easier by extending Django\'s ImageField',
+    url='https://github.com/rogerhoward/djiiif/',
     author='Roger Howard',
     author_email='rogerhoward+django@gmail.com',
     classifiers=[
@@ -25,9 +26,10 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
