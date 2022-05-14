@@ -1,3 +1,4 @@
+
 # djiiif
 
 djiiif is a package designed to make integrating the [IIIF Image API](http://iiif.io/api/image/2.1/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
@@ -13,6 +14,7 @@ I love ImageKit, but I recently worked on a project where we already had IIIF ha
 ## Examples
 
 First, let's setup a new field (or convert an existing ImageField):
+
 
 
 `models.py`

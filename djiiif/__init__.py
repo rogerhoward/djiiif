@@ -2,6 +2,7 @@ from django.db.models import ImageField
 from django.db.models.fields.files import ImageFieldFile
 from django.conf import settings
 
+
 def urljoin(parts):
     """
     Takes a list of URL parts and smushes em together into a string,
@@ -17,21 +18,27 @@ class IIIFObject(object):
 
         # for each profile defined in settings
         for name in settings.IIIF_PROFILES:
+            profile = settings.IIIF_PROFILES[name]           
 
-            profile = settings.IIIF_PROFILES[name]
+            if parent.name:
+                if type(profile) is dict:
+                    iiif = profile
+                elif callable(profile):
+                    iiif = profile(parent)  
 
-            if type(profile) is dict:
-                iiif = profile
-            elif callable(profile):
-                iiif = profile(parent)
+                identifier = parent.name.replace("/", "%2F")
 
-            url = urljoin([iiif['host'], parent.name, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
-            setattr(self, name, url)
+                url = urljoin([iiif['host'], identifier, iiif['region'], iiif['size'], iiif['rotation'], '{}.{}'.format(iiif['quality'], iiif['format'])])
+                setattr(self, name, url)
+            else:
+                setattr(self, name, "")
 
         # Add info.json URL
-        url = urljoin([iiif['host'], parent.name, "info.json"])
-        setattr(self, "info", url)
-
+        if parent.name:
+            url = urljoin([iiif['host'], identifier, "info.json"])
+            setattr(self, "info", url)
+        else:
+            setattr(self, "info", "")
 
 
 class IIIFFieldFile(ImageFieldFile):
