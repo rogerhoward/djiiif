@@ -23,7 +23,6 @@ original = IIIFField()
 
 Second, configure the relevant settings.
 
-
 `settings.py`
 ```python
 
@@ -66,7 +65,6 @@ As of version 0.15, we can also generate a IIIF info.json URL:
 print(instance.original.iiif.info)
 > http://server/uploads/filename.jpg/info.json
 ```
-
 
 ### callable-based profiles
 

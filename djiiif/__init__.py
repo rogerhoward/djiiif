@@ -1,4 +1,3 @@
-
 from django.db.models import ImageField
 from django.db.models.fields.files import ImageFieldFile
 from django.conf import settings
@@ -40,7 +39,6 @@ class IIIFObject(object):
             setattr(self, "info", url)
         else:
             setattr(self, "info", "")
-
 
 
 class IIIFFieldFile(ImageFieldFile):
