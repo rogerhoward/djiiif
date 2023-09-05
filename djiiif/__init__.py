@@ -40,6 +40,13 @@ class IIIFObject(object):
         else:
             setattr(self, "info", "")
 
+        # Add plain identifier URL
+        if parent.name:
+            url = urljoin([iiif['host'], identifier)
+            setattr(self, "identifier", url)
+        else:
+            setattr(self, "identifier", "")
+
 
 class IIIFFieldFile(ImageFieldFile):
     @property
