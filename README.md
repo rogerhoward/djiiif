@@ -59,11 +59,18 @@ In a Django template:
 <img src="{{ instance.original.iiif.thumbnail }}">
 ```
 
-As of version 0.15, we can also generate a IIIF info.json URL:
+As of version 0.15, there's a IIIF info.json URL in the info property:
 
 ```
 print(instance.original.iiif.info)
 > http://server/uploads/filename.jpg/info.json
+```
+
+As of version 0.21, there's a IIIF URL with just the identifier, great for OpenSeadragon use:
+
+```
+print(instance.original.iiif.identifier)
+> http://server/uploads/filename.jpg
 ```
 
 ### callable-based profiles
