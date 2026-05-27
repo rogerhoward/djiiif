@@ -14,5 +14,7 @@ venv*
 htmlcov/
 .coverage
 .cache/
+.pytest_cache/
+.venv/
 *.swp
 *.swo
