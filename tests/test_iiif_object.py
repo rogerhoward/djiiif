@@ -35,10 +35,17 @@ def test_info_url_present():
 
 
 @override_settings(IIIF_PROFILES=DICT_PROFILES)
+def test_identifier_url_present():
+    obj = IIIFObject(FakeParent("uploads/file.jpg"))
+    assert obj.identifier == "http://server/uploads%2Ffile.jpg"
+
+
+@override_settings(IIIF_PROFILES=DICT_PROFILES)
 def test_empty_name_returns_empty_strings():
     obj = IIIFObject(FakeParent(""))
     assert obj.thumbnail == ""
     assert obj.info == ""
+    assert obj.identifier == ""
 
 
 @override_settings(IIIF_PROFILES=DICT_PROFILES)
@@ -46,6 +53,7 @@ def test_none_name_returns_empty_strings():
     obj = IIIFObject(FakeParent(None))
     assert obj.thumbnail == ""
     assert obj.info == ""
+    assert obj.identifier == ""
 
 
 @override_settings(IIIF_PROFILES=DICT_PROFILES)

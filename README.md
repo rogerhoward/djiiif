@@ -66,6 +66,13 @@ print(instance.original.iiif.info)
 > http://server/uploads/filename.jpg/info.json
 ```
 
+As of version 0.21, we also expose a plain identifier-only URL (host + identifier, with no `/region/size/rotation/quality.format` suffix) — handy for handing the image off to viewers like OpenSeadragon that take just the IIIF identifier:
+
+```
+print(instance.original.iiif.identifier)
+> http://server/uploads/filename.jpg
+```
+
 ### callable-based profiles
 
 You can also use a callable to dynamically generate a URL. The callable will receive the parent `IIIFFieldFile` (a subclass of `ImageFieldFile`) as its sole parameter, `parent`, and must return a `dict` with the following keys: host, region, size, rotation, quality, and format. Using a callable allows you to implement more complex logic in your profile, including the ability to access the original file's name, width, and height.

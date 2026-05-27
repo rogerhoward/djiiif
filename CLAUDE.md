@@ -40,7 +40,7 @@ CI runs the same `pytest` invocation across Python 3.10–3.13 via `.github/work
 
 The whole library is two files; the second is a thin wrapper around the first.
 
-- `djiiif/__init__.py` — defines `IIIFField` (subclass of `ImageField`) whose `attr_class` is `IIIFFieldFile` (subclass of `ImageFieldFile`). Accessing `.iiif` on a field file returns a freshly constructed `IIIFObject`, which reads `settings.IIIF_PROFILES` and sets one attribute per profile name holding the assembled IIIF URL, plus an `info` attribute for the IIIF `info.json` URL. Empty/unset fields produce empty-string URLs (this is the behavior referenced by the "safe for empty fields" / "return empty string for unpopulated fields" commits).
+- `djiiif/__init__.py` — defines `IIIFField` (subclass of `ImageField`) whose `attr_class` is `IIIFFieldFile` (subclass of `ImageFieldFile`). Accessing `.iiif` on a field file returns a freshly constructed `IIIFObject`, which reads `settings.IIIF_PROFILES` and sets one attribute per profile name holding the assembled IIIF URL, plus an `info` attribute for the IIIF `info.json` URL and an `identifier` attribute for the plain `host/identifier` URL (used for openseadragon-style integrations). Empty/unset fields produce empty-string URLs (this is the behavior referenced by the "safe for empty fields" / "return empty string for unpopulated fields" commits).
 - `djiiif/templatetags/iiiftags.py` — registers the `{% iiif imagefield 'profile' %}` template tag. The tag just does `getattr(imagefield.iiif, profile)`, so it delegates to the real `IIIFObject` via `IIIFFieldFile.iiif`.
 - `djiiif/templatetags/__init__.py` — **dead code**: contains an out-of-sync duplicate of `IIIFObject` / `IIIFField` / `urljoin` (no empty-name guard, no `info` URL, sets a stray `url` attribute). Nothing imports it. Treat `djiiif/__init__.py` as the source of truth; this file should be emptied as part of cleanup.
 
@@ -67,7 +67,7 @@ Documentation in this repo must stay current with the code. When you change beha
 Every change to `djiiif/` must keep the suite green and the coverage gate satisfied. When adding behavior, add tests alongside it. The suite must always cover:
 
 - Both `IIIF_PROFILES` shapes: plain `dict` profile and callable profile.
-- The empty-/`None`-`name` path (must return `""` for every profile attr and for `info`) — this is the regression guarded by the 0.19 / 0.20 commits.
+- The empty-/`None`-`name` path (must return `""` for every profile attr, for `info`, and for `identifier`) — this is the regression guarded by the 0.19 / 0.20 commits.
 - Identifier encoding: a field name containing `/` must appear as `%2F` in the URL.
 - The `{% iiif %}` template tag's happy path and its `NotAnIIIFField` error path.
 

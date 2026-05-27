@@ -6,7 +6,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='djiiif',
-    version='0.21',
+    version='0.23',
 
     packages=find_packages(exclude=["tests", "tests.*"]),
     install_requires=['Django'],
