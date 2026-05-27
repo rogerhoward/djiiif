@@ -1,0 +1,51 @@
+name: release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install build & test deps
+        run: |
+          pip install --upgrade pip
+          pip install -e . django pytest pytest-django pytest-cov build twine
+      - name: Verify release tag matches setup.py version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg_version="$(python -c "import re,pathlib; m=re.search(r'''version=['\"]([^'\"]+)''', pathlib.Path('setup.py').read_text()); print(m.group(1))")"
+          echo "Release tag: $tag"
+          echo "setup.py version: $pkg_version"
+          test "$tag" = "$pkg_version" || { echo "::error::Release tag '$tag' does not match setup.py version '$pkg_version'. Bump setup.py before tagging."; exit 1; }
+      - name: Run tests
+        run: pytest
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Check distributions with twine
+        run: python -m twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/djiiif
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
