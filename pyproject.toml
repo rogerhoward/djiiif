@@ -1,6 +1,57 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=61", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "djiiif"
+dynamic = ["version"]
+description = "Simple IIIF integration for Django."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD License" }
+authors = [{ name = "Roger Howard", email = "rogerhoward+django@gmail.com" }]
+dependencies = ["Django"]
+classifiers = [
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+
+[project.optional-dependencies]
+# Optional Django REST Framework support (djiiif.serializers).
+drf = ["djangorestframework"]
+# Everything needed to test, build, and document the package locally / in CI.
+dev = [
+    "pytest",
+    "pytest-django",
+    "pytest-cov",
+    "djangorestframework",
+    "build",
+    "twine",
+    "sphinx",
+]
+
+[project.urls]
+Homepage = "https://github.com/rogerhoward/djiiif/"
+
+# Ship only the djiiif package (never the tests/), replacing the old
+# find_packages(exclude=[...]) in setup.py.
+[tool.setuptools.packages.find]
+include = ["djiiif*"]
+
+# Version is derived from the git tag (e.g. v0.24 -> 0.24); no hand-bumped
+# version, and no tag-vs-version assertion needed in release.yml.
+[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
