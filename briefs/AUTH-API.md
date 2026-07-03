@@ -1,6 +1,6 @@
 # AUTH-API — Optional IIIF Authorization Flow API 2.0 integration
 
-**Status:** Complete draft — ready for review
+**Status:** Implemented on branch `auth-api` (metadata-only, per this brief)
 **Branch:** `auth-api`
 **Date:** 2026-07-03
 

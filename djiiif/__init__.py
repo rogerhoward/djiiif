@@ -8,6 +8,12 @@ and the generated ``info_document`` / ``manifest`` documents.
 Profiles are configured in ``settings.IIIF_PROFILES`` and may be a plain ``dict``,
 a :class:`Profile` instance, or a callable returning either (see
 :func:`resolve_profile`).
+
+Optionally, ``settings.IIIF_AUTH`` describes an IIIF Authorization Flow 2.0 probe
+service (a :class:`ProbeService`, a ``dict``, or a callable returning either or
+``None``); when set, its ``service`` block is embedded in the generated
+``info_document`` / ``manifest`` for access-controlled images (see
+:func:`resolve_auth`).
 """
 
 from dataclasses import dataclass
@@ -170,6 +176,155 @@ def resolve_profile(profile, parent) -> dict[str, str]:
     )
 
 
+def _language_map(value: str | list[str] | dict | None) -> dict | None:
+    """Coerce a label-ish value into a IIIF language map.
+
+    Accepts a plain string or list of strings (wrapped under the ``"none"``
+    language key) or an already-formed language map (returned unchanged).
+
+    Args:
+        value: A string, list of strings, language-map ``dict``, or ``None``.
+
+    Returns:
+        A language map ``dict``, or ``None`` if ``value`` is ``None``.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        return {"none": [value]}
+    return {"none": list(value)}
+
+
+@dataclass(frozen=True)
+class LogoutService:
+    """An Authorization Flow 2.0 logout service (``AuthLogoutService2``)."""
+
+    id: str
+    label: str | list[str] | dict | None = None
+
+    def as_dict(self) -> dict:
+        """Serialize to the nested Auth 2.0 service ``dict``."""
+        service = {"id": self.id, "type": "AuthLogoutService2"}
+        label = _language_map(self.label)
+        if label is not None:
+            service["label"] = label
+        return service
+
+
+@dataclass(frozen=True)
+class TokenService:
+    """An Authorization Flow 2.0 access token service (``AuthAccessTokenService2``)."""
+
+    id: str
+
+    def as_dict(self) -> dict:
+        """Serialize to the nested Auth 2.0 service ``dict``."""
+        return {"id": self.id, "type": "AuthAccessTokenService2"}
+
+
+@dataclass(frozen=True)
+class AccessService:
+    """An Authorization Flow 2.0 access service (``AuthAccessService2``).
+
+    Attributes:
+        id: The access service URI.
+        profile: The interaction pattern — ``"active"`` (interactive login),
+            ``"kiosk"`` (automatic), or ``"external"`` (ambient/IP).
+        label / heading / note / confirm_label: ``active``-pattern UI text; each
+            accepts a plain string, list of strings, or a IIIF language map.
+        token: The nested :class:`TokenService`.
+        logout: The optional nested :class:`LogoutService`.
+    """
+
+    id: str
+    profile: str = "active"
+    label: str | list[str] | dict | None = None
+    heading: str | list[str] | dict | None = None
+    note: str | list[str] | dict | None = None
+    confirm_label: str | list[str] | dict | None = None
+    token: TokenService | None = None
+    logout: LogoutService | None = None
+
+    def as_dict(self) -> dict:
+        """Serialize to the nested Auth 2.0 service ``dict``."""
+        service = {"id": self.id, "type": "AuthAccessService2", "profile": self.profile}
+        for key, value in (
+            ("label", self.label),
+            ("heading", self.heading),
+            ("note", self.note),
+            ("confirmLabel", self.confirm_label),
+        ):
+            language_map = _language_map(value)
+            if language_map is not None:
+                service[key] = language_map
+
+        nested = [s.as_dict() for s in (self.token, self.logout) if s is not None]
+        if nested:
+            service["service"] = nested
+        return service
+
+
+@dataclass(frozen=True)
+class ProbeService:
+    """An Authorization Flow 2.0 probe service (``AuthProbeService2``).
+
+    The top of the nested auth service block and the value clients look for in an
+    ``info.json`` / manifest. Use as an ``IIIF_AUTH`` value or return it from an
+    ``IIIF_AUTH`` callable.
+
+    Attributes:
+        id: The probe service URI.
+        access: The nested :class:`AccessService`.
+    """
+
+    id: str
+    access: AccessService | None = None
+
+    def as_dict(self) -> dict:
+        """Serialize to the nested Auth 2.0 service ``dict``."""
+        service = {"id": self.id, "type": "AuthProbeService2"}
+        if self.access is not None:
+            service["service"] = [self.access.as_dict()]
+        return service
+
+
+def resolve_auth(parent) -> dict | None:
+    """Resolve ``settings.IIIF_AUTH`` to a probe-service ``dict`` for an image.
+
+    Mirrors :func:`resolve_profile`: the setting may be a :class:`ProbeService`,
+    a raw ``dict``, a callable receiving the field file and returning either (or
+    ``None`` for a public image), or unset. Empty/public cases resolve to
+    ``None`` so no auth block is emitted.
+
+    Args:
+        parent: The :class:`IIIFFieldFile` passed to callable configs.
+
+    Returns:
+        The nested probe-service ``dict``, or ``None`` when there is no auth.
+
+    Raises:
+        ImproperlyConfigured: If the (resolved) value is not a ``ProbeService``,
+            ``dict``, or ``None``.
+    """
+    auth = getattr(settings, "IIIF_AUTH", None)
+    if auth is None:
+        return None
+    if callable(auth):
+        auth = auth(parent)
+    if auth is None:
+        return None
+    if isinstance(auth, ProbeService):
+        return auth.as_dict()
+    if isinstance(auth, dict):
+        return auth
+    raise ImproperlyConfigured(
+        "IIIF_AUTH must be a ProbeService, dict, callable, or None, got "
+        f"{type(auth).__name__}."
+    )
+
+
 def image_url(spec: dict[str, str], identifier: str) -> str:
     """Assemble a full IIIF Image API request URL from a resolved spec.
 
@@ -231,6 +386,24 @@ def _compliance_level(level: str | None) -> str:
     return level
 
 
+def _require_auth_v3(auth: dict | None, version: int) -> None:
+    """Guard: an Auth 2.0 block may only be emitted at Image API version 3.
+
+    Args:
+        auth: The resolved auth block, or ``None``.
+        version: The resolved Image API version.
+
+    Raises:
+        ImproperlyConfigured: If ``auth`` is set while ``version`` is not 3
+            (Authorization Flow 2.0 pairs with Image/Presentation API 3).
+    """
+    if auth is not None and version != 3:
+        raise ImproperlyConfigured(
+            "IIIF_AUTH (Authorization Flow 2.0) requires IIIF_IMAGE_API_VERSION = 3; "
+            f"got version {version}."
+        )
+
+
 def build_info_document(
     id_url: str,
     width: int,
@@ -238,6 +411,7 @@ def build_info_document(
     *,
     version: int | None = None,
     level: str | None = None,
+    auth: dict | None = None,
 ) -> dict:
     """Build a spec-conformant IIIF Image API ``info.json`` document.
 
@@ -249,15 +423,20 @@ def build_info_document(
             ``settings.IIIF_IMAGE_API_VERSION`` (``3``).
         level: Advertised compliance level; defaults to
             ``settings.IIIF_COMPLIANCE_LEVEL`` (``"level2"``).
+        auth: An optional resolved Authorization Flow 2.0 probe-service ``dict``
+            (see :func:`resolve_auth`). When present it is added to the document's
+            ``service`` array; only valid at version 3.
 
     Returns:
         The ``info.json`` document as a dict, ready for ``JsonResponse``.
 
     Raises:
-        ImproperlyConfigured: If ``version`` is unknown.
+        ImproperlyConfigured: If ``version`` is unknown, or ``auth`` is set while
+            not on version 3.
     """
     version = _api_version(version)
     level = _compliance_level(level)
+    _require_auth_v3(auth, version)
 
     if version == 2:
         return {
@@ -269,7 +448,7 @@ def build_info_document(
             "height": height,
         }
 
-    return {
+    document = {
         "@context": IIIF_CONTEXTS[3],
         "id": id_url,
         "type": "ImageService3",
@@ -278,6 +457,9 @@ def build_info_document(
         "width": width,
         "height": height,
     }
+    if auth is not None:
+        document["service"] = [auth]
+    return document
 
 
 def build_manifest(
@@ -288,6 +470,7 @@ def build_manifest(
     label: str,
     version: int | None = None,
     level: str | None = None,
+    auth: dict | None = None,
 ) -> dict:
     """Build a minimal single-image IIIF Presentation API 3.0 Manifest.
 
@@ -310,15 +493,21 @@ def build_manifest(
             ``3``); defaults to ``settings.IIIF_IMAGE_API_VERSION`` (``3``).
         level: Advertised compliance level; defaults to
             ``settings.IIIF_COMPLIANCE_LEVEL`` (``"level2"``).
+        auth: An optional resolved Authorization Flow 2.0 probe-service ``dict``
+            (see :func:`resolve_auth`). When present it is added to the
+            access-controlled image body's ``service`` array (alongside the image
+            service); only valid at version 3.
 
     Returns:
         The manifest as a dict, ready for ``JsonResponse``.
 
     Raises:
-        ImproperlyConfigured: If ``version`` is unknown.
+        ImproperlyConfigured: If ``version`` is unknown, or ``auth`` is set while
+            not on version 3.
     """
     version = _api_version(version)
     level = _compliance_level(level)
+    _require_auth_v3(auth, version)
 
     # v3 uses the "max" size keyword; v2 uses "full" for a full-resolution image.
     full_size = "max" if version == 3 else "full"
@@ -332,6 +521,10 @@ def build_manifest(
         }
     else:
         service = {"id": id_url, "type": "ImageService3", "profile": level}
+
+    # The probe service is declared on the access-controlled resource — here the
+    # image annotation body — alongside its image service.
+    body_services = [service] if auth is None else [service, auth]
 
     canvas_id = urljoin([id_url, "canvas", "1"])
     return {
@@ -361,7 +554,7 @@ def build_manifest(
                                     "format": "image/jpeg",
                                     "width": width,
                                     "height": height,
-                                    "service": [service],
+                                    "service": body_services,
                                 },
                             }
                         ],
@@ -457,14 +650,20 @@ class IIIFObject(object):
         Accessing this reads the image from storage; the eager URL attributes
         never do. Shape is controlled by ``settings.IIIF_IMAGE_API_VERSION``
         (default ``3``) and ``settings.IIIF_COMPLIANCE_LEVEL`` (default
-        ``"level2"``).
+        ``"level2"``). When ``settings.IIIF_AUTH`` resolves to a probe service
+        for this image, its Authorization Flow 2.0 ``service`` block is included.
 
         Returns:
             The ``info.json`` document, or ``None`` for an empty/unset field.
         """
         if not self.identifier:
             return None
-        return build_info_document(self.identifier, self._parent.width, self._parent.height)
+        return build_info_document(
+            self.identifier,
+            self._parent.width,
+            self._parent.height,
+            auth=resolve_auth(self._parent),
+        )
 
     @cached_property
     def manifest(self) -> dict | None:
@@ -473,7 +672,9 @@ class IIIFObject(object):
         Wraps this image in a one-canvas manifest suitable for Mirador or
         OpenSeadragon. The label defaults to the file's base name. Like
         :attr:`info_document`, accessing this reads the image dimensions from
-        storage.
+        storage. When ``settings.IIIF_AUTH`` resolves to a probe service for this
+        image, its Authorization Flow 2.0 ``service`` block is attached to the
+        image body.
 
         Returns:
             The manifest document, or ``None`` for an empty/unset field.
@@ -482,7 +683,11 @@ class IIIFObject(object):
             return None
         label = self._parent.name.rsplit("/", 1)[-1]
         return build_manifest(
-            self.identifier, self._parent.width, self._parent.height, label=label
+            self.identifier,
+            self._parent.width,
+            self._parent.height,
+            label=label,
+            auth=resolve_auth(self._parent),
         )
 
 
