@@ -4,16 +4,20 @@ import os
 # allow setup.py to be run from any path
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
+with open("README.md", encoding="utf-8") as readme:
+    long_description = readme.read()
+
 setup(
     name='djiiif',
-    version='0.23',
+    version='0.24',
 
     packages=find_packages(exclude=["tests", "tests.*"]),
     install_requires=['Django'],
     include_package_data=True,
     license='BSD License',  # example license
     description='Simple IIIF integration for Django.',
-    long_description='djiiif is a package designed to make integrating the IIIF Image API easier by extending Django\'s ImageField',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     url='https://github.com/rogerhoward/djiiif/',
     author='Roger Howard',
     author_email='rogerhoward+django@gmail.com',
