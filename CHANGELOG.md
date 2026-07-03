@@ -59,6 +59,12 @@ dates are the commit dates of the corresponding version bump.
 - An empty `IIIF_PROFILES` no longer raises when a field has a value; `info` and
   `identifier` return `""` (and the documents `None`), matching the empty-field
   behavior.
+- **Packaging modernized (PEP 621 + setuptools-scm).** All metadata moved to
+  `pyproject.toml`; the package version is now derived from the git tag instead
+  of a hand-bumped `setup.py`. Removed `setup.py`, `Pipfile`, `Pipfile.lock`,
+  `MANIFEST.in`, `requirements.txt`, and `build.sh`. No change to the installed
+  package or its runtime dependency (`Django`). **Contributors:** install the dev
+  toolchain with `pip install -e ".[dev]"` (Pipenv is no longer used).
 
 ## [0.23] - 2026-05-27
 ### Added

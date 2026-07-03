@@ -14,10 +14,12 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # setuptools-scm needs full history + tags to derive the version
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install --upgrade pip
-      - run: pip install -e ".[drf]" django pytest pytest-django pytest-cov
+      - run: pip install -e ".[dev]"
       - run: pytest
