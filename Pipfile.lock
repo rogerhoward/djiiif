@@ -34,11 +34,12 @@
         },
         "bleach": {
             "hashes": [
-                "sha256:1a1a85c1595e07d8db14c5f09f09e6433502c51c595970edc090551f0db99414",
-                "sha256:33c16e3353dbd13028ab4799a0f89a83f113405c766e9c122df8a06f5b85b3f4"
+                "sha256:4202482733d85cedd04e59fcb2f89f4e4c7c385a78d3c3c23c30446843a37452",
+                "sha256:4b6b6a54fff2e69a3dde9d21cc6301220bee3c3cb792187d11403fd795031081"
             ],
-            "markers": "python_version >= '3.7'",
-            "version": "==6.0.0"
+            "index": "pypi",
+            "markers": "python_version >= '3.10'",
+            "version": "==6.4.0"
         },
         "certifi": {
             "hashes": [
