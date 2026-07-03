@@ -1,6 +1,6 @@
 # CONTENT-STATE — IIIF Content State API 1.0 helpers (share/deep-link support)
 
-**Status:** Proposed
+**Status:** Proposed — all questions resolved, ready to implement
 **Branch:** _none yet (implementation branch TBD)_
 **Date:** 2026-07-03
 
@@ -58,9 +58,11 @@ orchestration.
     padding, decode, `json.loads` when the payload is JSON).
 - **State builder** working from what djiiif already knows:
   - `build_content_state(manifest_id: str, *, canvas_id: str | None = None,
-    xywh: str | None = None) -> dict` — returns the annotation dict. With only
-    `manifest_id` it targets the Manifest; with `canvas_id` it targets the
-    Canvas with `partOf` → Manifest; `xywh` appends the fragment.
+    xywh: str | tuple[int, int, int, int] | None = None) -> dict` — returns the
+    annotation dict. With only `manifest_id` it targets the Manifest; with
+    `canvas_id` it targets the Canvas with `partOf` → Manifest; `xywh` appends
+    the fragment. A 4-tuple of ints is formatted to the `x,y,w,h` string; a
+    string is used verbatim (spec-literal escape hatch).
 - **`IIIFObject` convenience** (lazy, no I/O):
   - `IIIFObject.content_state(*, xywh: str | None = None, encoded: bool = True)`
     — builds the state for this image's own manifest/canvas URIs and returns the
@@ -105,23 +107,26 @@ state = photo.image.iiif.content_state(xywh="1000,2000,1000,2000")
 - No multi-target or multi-canvas states in v1 of this feature (the spec allows
   them; the builder can grow a list form later without breakage).
 
-## Open questions
+## Decisions
 
-1. **Placement** — `djiiif/__init__.py` (keeps the "core is one module" story)
-   vs a new `djiiif/contentstate.py` (keeps `__init__` from growing). Leaning
-   `__init__.py`: it's ~60 lines of pure functions.
-2. **Region ergonomics** — accept only a preformatted `xywh` string, or also a
-   4-tuple of ints? (Tuple is friendlier; string is spec-literal. Accepting both
-   is cheap.)
-3. Should `serve_manifest`-hosted manifests get a companion `serve_content_state`
-   redirect view? Deferred — see Non-goals.
+1. **Placement** — **`djiiif/__init__.py`**. It is ~60 lines of pure functions
+   with no new imports beyond `base64`/`json`; keeping the core a single module
+   preserves the "core is one file" story and matches where every other builder
+   lives.
+2. **Region ergonomics** — **accept both** a preformatted `xywh` string
+   (spec-literal, copy-paste-safe) and a 4-tuple of ints (Pythonic). Tuple is
+   formatted to `x,y,w,h`; anything else passes through verbatim.
+3. **No `serve_content_state` redirect view** — a "launch viewer" redirect is a
+   2-line user view once the helpers exist, and viewer choice is app policy,
+   not djiiif's. Stays in Non-goals.
 
 ## Testing (per repo conventions — 90% coverage gate)
 
 - Encode/decode round-trip; padding stripped on encode and restored on decode;
   non-JSON (bare URI string) payloads survive the round-trip.
 - `build_content_state`: manifest-only, canvas + `partOf`, and `xywh` fragment
-  shapes match the spec's examples.
+  shapes match the spec's examples; tuple and string `xywh` forms produce the
+  same fragment.
 - `IIIFObject.content_state`: derived URIs match the ones `manifest` emits;
   empty/unset field returns `""`; encoded output decodes back to the dict form.
 - Template tag happy path + `NotAnIIIFField` error path.

@@ -1,6 +1,6 @@
 # INFO-JSON-ENRICHMENT — richer generated `info.json` (sizes, tiles, limits, rights)
 
-**Status:** Proposed
+**Status:** Proposed — all questions resolved, ready to implement
 **Branch:** _none yet (implementation branch TBD)_
 **Date:** 2026-07-03
 
@@ -80,15 +80,18 @@ emits it in the right place for the configured API version.
   - **v3**: emit each present key at top level with spec casing
     (`maxWidth`, `preferredFormats`, …); `rights` as given.
   - **v2**: emit `sizes`/`tiles`; **raise `ImproperlyConfigured`** for
-    v3-only keys (consistent fail-loud posture, same as `IIIF_AUTH` at v2) —
-    or silently drop them (see Open questions).
+    v3-only keys (consistent fail-loud posture, same as `IIIF_AUTH` at v2 —
+    see Decisions).
   - Key order: keep spec-conventional grouping (dimensions, then `sizes`/
     `tiles`, then limits, then rights/extras) for human readability; JSON
     consumers don't care.
 - `IIIFObject.info_document` and `serve_info_json` thread
-  `resolve_info(...)` through, exactly like `auth`. Note `serve_info_json`
-  has no field file — its resolve call passes the decoded storage name (or
-  `None`); the callable contract must accommodate that (see Open questions).
+  `resolve_info(...)` through, exactly like `auth`. On the view path there is
+  no field file: per the repo-wide convention settled here (Decision 2),
+  **per-image callables receive the `IIIFFieldFile` on model paths and the
+  decoded storage name (`str`) on view paths** — both expose the identity a
+  callable actually branches on (the name), and the documented signature is
+  `parent: IIIFFieldFile | str`.
 - **Unset ⇒ byte-identical output to today.**
 
 ## Non-goals
@@ -103,28 +106,37 @@ emits it in the right place for the configured API version.
 - The `sizeUpscaling` feature-name minutiae of compliance levels — the
   operator's declared `extra_features` is passed through verbatim.
 
-## Open questions
+## Decisions
 
-1. **v3-only keys at v2** — raise `ImproperlyConfigured` (consistent with
-   `IIIF_AUTH`, catches misconfiguration) vs silently omit (lets one
-   `IIIF_INFO` serve a mixed-version transition). Leaning: raise.
-2. **Callable argument for the view path** — `serve_info_json` has no
-   `IIIFFieldFile`. Options: pass the storage name string (documented union
-   type), pass `None`, or accept that view-served documents only support the
-   dict form. The same problem will recur for any per-image setting used by
-   the views — worth settling a repo-wide convention here.
-3. **Snake_case setting keys mapped to camelCase output** (proposed, Pythonic)
-   vs requiring spec-literal camelCase keys (zero mapping, copy-paste from
-   spec examples works). Leaning: accept both, normalize once.
-4. Should `sizes` get a convenience derivation (`"sizes": "auto"` computing
-   halvings down to a floor)? Cute, but it reads dimensions from storage in a
-   context that is otherwise declaration-only. Leaning: no; the callable
-   recipe above covers it explicitly.
+1. **v3-only keys at v2** — **raise `ImproperlyConfigured`.** Consistent with
+   `IIIF_AUTH` at v2 and the unknown-version check: configuration that cannot
+   mean what it says fails loud. A mixed-version transition can branch in a
+   callable (`version` is a settings read away); silent dropping would mask
+   typos forever.
+2. **Callable argument for the view path** — **repo-wide convention:**
+   per-image setting callables (`IIIF_INFO`, and any future ones used by the
+   drop-in views) receive the `IIIFFieldFile` on model paths and the
+   **decoded storage name (`str`)** on view paths; documented signature
+   `parent: IIIFFieldFile | str`. Rationale: the name is the identity both
+   paths share, `None` would force every callable to handle a no-information
+   case, and dict-only-for-views would silently fork the feature set. A
+   callable needing model data looks it up by name — which is exactly what
+   the view path's information really is. (`IIIF_AUTH` today is unaffected:
+   the existing views never resolve it; if they ever do, this convention
+   applies.)
+3. **Key casing** — **accept both** snake_case (Pythonic, matches dataclass
+   field names) and spec-literal camelCase (copy-paste from spec examples
+   works), normalized once in `resolve_info`. Conflicting duplicates
+   (`max_width` and `maxWidth` both present) raise `ImproperlyConfigured`.
+4. **`"sizes": "auto"`** — **no.** It would read pixel dimensions from
+   storage inside an otherwise declaration-only code path, hiding I/O. The
+   documented callable recipe derives sizes explicitly in three lines.
 
 ## Testing (per repo conventions — 90% coverage gate)
 
 - Each key emitted with correct spec casing/placement at v3; `sizes`/`tiles`
-  at v2; v3-only-key-at-v2 error (or omission) path per decision 1.
+  at v2; v3-only key at v2 raises `ImproperlyConfigured`; camelCase and
+  snake_case keys both accepted, conflicting duplicates rejected.
 - Dict, callable, and (if adopted) `InfoExtras` dataclass shapes through
   `resolve_info`, plus its bad-type `ImproperlyConfigured` path.
 - **Unset ⇒ byte-identical documents** (regression pin for both versions).

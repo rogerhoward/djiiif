@@ -1,6 +1,6 @@
 # CHANGE-DISCOVERY — IIIF Change Discovery API 1.0 activity stream (harvestable collections)
 
-**Status:** Proposed
+**Status:** Proposed — all questions resolved, ready to implement
 **Branch:** _none yet (implementation branch TBD)_
 **Date:** 2026-07-03
 
@@ -55,7 +55,11 @@ ship a model, and deserves its own decision.
   - `end_time` — an aware `datetime` (the modified timestamp),
   - `type` — `"Update"` (default) or `"Create"` (level 1 allows Create too).
 
-  The callable owns the ordering contract: **ascending by `end_time`**. In
+  Entries may be plain dicts or instances of a new frozen **`Activity`
+  dataclass** (fields matching the keys above, with the same defaults);
+  `resolve_activity(entry)` normalizes both to the dict form, mirroring
+  `resolve_profile`. The callable owns the ordering contract: **ascending by
+  `end_time`** (trusted and documented, not re-sorted — see Decisions). In
   practice it is a thin generator over a queryset:
 
   ```python
@@ -99,21 +103,32 @@ ship a model, and deserves its own decision.
 - Harvesting/consuming other providers' streams (client side).
 - `seeAlso`/provenance enrichment of activities.
 
-## Open questions
+## Decisions
 
-1. **URL naming** — `activity/collection` + `activity/page/<n>` vs the spec
-   examples' `activity/all-changes` + `activity/page-<n>`. Cosmetic; the spec
-   mandates no paths.
-2. **Source contract** — dicts (extensible, stringly) vs a small frozen
-   `Activity` dataclass (typed, consistent with `Profile`/`ProbeService`).
-   Leaning: accept both, normalize via a `resolve_activity(...)` mirroring
-   `resolve_profile`.
-3. **Ordering enforcement** — trust the callable's ordering (documented
-   contract) vs sorting defensively in the view (O(n log n) per request, breaks
-   queryset laziness). Leaning: trust + document.
-4. Should the collection also emit `partOf`/`seeAlso` links when the project
-   serves a top-level IIIF Collection (see PRESENTATION-ENRICHMENT brief)?
-   Nice-to-have, non-blocking.
+1. **URL naming** — **`activity/collection` + `activity/page/<int:page>`**.
+   The spec mandates no paths; this form is Django-idiomatic (int converter,
+   clean named routes `djiiif:activity-collection` / `djiiif:activity-page`)
+   and harvesters follow the `first`/`last`/`next` links rather than guessing
+   paths, so the spec examples' `all-changes` naming buys nothing.
+2. **Source contract** — **both**: plain dicts and a frozen `Activity`
+   dataclass, normalized by `resolve_activity(...)`. This is the repo-wide
+   dual-shape convention (`Profile`/`ProbeService` precedent): dataclass for
+   discoverability and typo-safety, dict for zero-import configuration.
+3. **Ordering enforcement** — **trust the callable, document the contract.**
+   Defensive sorting would materialize and re-sort a lazily-sliced queryset on
+   every request to guard against a bug that tests catch once. The contract
+   line in the docs is explicit: "must yield in ascending `end_time` order".
+4. **Cross-links to a top-level IIIF Collection** — deferred to Future work;
+   emitting them requires knowing the collection URL, which only exists if the
+   PRESENTATION-ENRICHMENT brief's `serve_collection` is configured.
+
+## Future work
+
+- **Level 2 conformance** (`Delete` activities) via an opt-in tombstone model —
+  djiiif's first database model, so it warrants its own brief if demand
+  appears.
+- `seeAlso`/`partOf` links from the `OrderedCollection` to the project's
+  top-level IIIF Collection once PRESENTATION-ENRICHMENT lands.
 
 ## Testing (per repo conventions — 90% coverage gate)
 
@@ -125,7 +140,8 @@ ship a model, and deserves its own decision.
   empty source (valid empty collection), unknown page → 404, unset
   `IIIF_ACTIVITY_SOURCE` → 404.
 - A queryset-shaped source and a generator source both work.
-- `resolve_activity` (if adopted): dict, dataclass, and rejection paths.
+- `resolve_activity`: dict, `Activity` dataclass, defaults (`Update`/
+  `Manifest`), and bad-type rejection paths.
 
 ## Docs & compatibility
 

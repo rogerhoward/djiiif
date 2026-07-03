@@ -1,6 +1,6 @@
 # PRESENTATION-ENRICHMENT — richer Presentation 3.0: descriptive metadata, multi-image manifests, Collections
 
-**Status:** Proposed
+**Status:** Proposed — all questions resolved, ready to implement
 **Branch:** _none yet (implementation branch TBD)_
 **Date:** 2026-07-03
 
@@ -116,28 +116,32 @@ configured.
   lag — v3 remains the interoperable baseline).
 - Any ORM coupling in builders — they stay pure functions over plain data.
 
-## Open questions
+## Decisions
 
-1. **Descriptor hook shape** — one `IIIF_MANIFEST_DESCRIPTORS` callable
-   returning a kwargs dict (proposed) vs a typed `ManifestDescriptors`
-   dataclass. Dict-of-kwargs is looser but matches "callable returning a dict"
-   precedent from `IIIF_PROFILES`; a dataclass could be added later without
-   breakage (accepted via `resolve_*` normalization like `Profile`).
-2. **Auth on multi-image manifests** — apply the single resolved `IIIF_AUTH`
-   block to every image body (proposed, matches current semantics) vs
-   per-canvas resolution. Per-canvas needs the field files, which the builder
-   deliberately doesn't see; revisit only if a real mixed-access use case shows
-   up.
-3. **`serve_collection` pagination** — IIIF Collections may be paged via
-   `first`/`next` Collection pages; start unpaged (collections of references
-   are small) and note the limit in docs?
+1. **Descriptor hook shape** — **plain kwargs dict** from the
+   `IIIF_MANIFEST_DESCRIPTORS` callable. Unlike `Profile`/`ProbeService`, this
+   is not a spec object with a fixed shape — it is literally the builder's
+   kwarg bag, so a dataclass would just duplicate the signature. Unknown keys
+   raise `ImproperlyConfigured` (typo safety without the dataclass). A typed
+   wrapper can be added later without breakage if wanted.
+2. **Auth on multi-image manifests** — **the single resolved `IIIF_AUTH` block
+   applies to every image body**, matching current single-image semantics. The
+   builder stays pure over plain data (no field files in scope), and a
+   mixed-access object within one manifest has no known real use case;
+   revisit only if one appears.
+3. **`serve_collection` pagination** — **unpaged**, with the size expectation
+   documented. A Collection of *references* is a few hundred bytes per item;
+   thousands of items remain a sub-megabyte response. Projects beyond that
+   scale should shard into nested collections themselves; spec-style paged
+   Collections are noted as future work, additive if ever needed.
 
 ## Testing (per repo conventions — 90% coverage gate)
 
 - Descriptors: each property emitted correctly (language-map coercion, metadata
   pair shapes, thumbnail wrapping, ISO `navDate`); **all-absent ⇒ output
   byte-identical to today** (regression pin); `IIIF_MANIFEST_DESCRIPTORS`
-  resolved for `IIIFObject.manifest` (callable and unset paths).
+  resolved for `IIIFObject.manifest` (callable and unset paths); an unknown
+  descriptor key raises `ImproperlyConfigured`.
 - `build_multi_manifest`: N canvases with correct indexed ids, per-canvas
   labels, v2 (`ImageService2`) variant, auth block on every body; single-image
   wrapper equivalence (old `build_manifest` output unchanged).

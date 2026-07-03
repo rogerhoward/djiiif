@@ -1,6 +1,6 @@
 # NAVPLACE-GEO — navPlace extension via GeoDjango (geolocated manifests)
 
-**Status:** Proposed
+**Status:** Proposed — all questions resolved, ready to implement
 **Branch:** _none yet (implementation branch TBD)_
 **Date:** 2026-07-03
 
@@ -100,16 +100,23 @@ module never imported by `djiiif/__init__.py`.
   `geom.transform(4326, clone=True)` — documented, not performed).
 - Validating user-supplied GeoJSON beyond basic shape normalization.
 
-## Open questions
+## Decisions
 
-1. **SRID safety** — silently trust coordinates vs raise
-   `ImproperlyConfigured` when a GEOS geometry's `srid` is set and ≠ 4326.
-   Leaning: raise (fail loud matches the repo's existing configuration-error
-   posture; wrong-datum coordinates are silent data corruption otherwise).
-2. **Tuple-with-label** input shape vs requiring a full Feature dict for
-   labeled features. The tuple is ergonomic; is it too cute?
-3. Should `navPlace` also be emitted in `info.json`? No — it is a Presentation
-   -family property; noted here to preempt the question.
+1. **SRID safety** — **raise `ImproperlyConfigured`** when a GEOS geometry's
+   `srid` is set and ≠ 4326. navPlace mandates WGS84; emitting projected
+   coordinates as if they were lon/lat is silent data corruption, and
+   fail-loud matches the repo's posture (`IIIF_AUTH` at v2, unknown API
+   version). The error message includes the one-line fix
+   (`geom.transform(4326, clone=True)`). A geometry with `srid` unset (raw
+   GeoJSON dicts have none) is trusted as WGS84, as GeoJSON itself specifies.
+2. **Tuple-with-label** — **keep it.** `(geometry, label)` covers the dominant
+   "one point, one place name" case in one line; anyone needing more supplies
+   a full Feature/FeatureCollection dict, which remains the escape hatch. Two
+   input shapes with an obvious escalation path beats forcing GeoJSON
+   boilerplate on the simple case.
+3. **`navPlace` in `info.json`** — **no.** It is a Presentation-family
+   property; the Image API has no navPlace and viewers would ignore it.
+   Recorded to preempt the question.
 
 ## Testing (per repo conventions — 90% coverage gate)
 
@@ -117,7 +124,7 @@ module never imported by `djiiif/__init__.py`.
   FeatureCollection (pass-through), `(geom, label)` pair, GEOS geometry
   (skipped via `importorskip("django.contrib.gis.geos")` if GEOS libraries are
   absent — same pattern as the DRF serializer tests), bad-type
-  `ImproperlyConfigured`, SRID rejection (per Open question 1).
+  `ImproperlyConfigured`, SRID rejection (per Decision 1).
 - Manifest emission: `navPlace` present with array `@context` (extension
   context first) when configured; **absent, with today's string context, when
   unconfigured** (regression pin); feature id synthesis.
