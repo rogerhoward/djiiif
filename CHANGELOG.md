@@ -28,10 +28,16 @@ dates are the commit dates of the corresponding version bump.
   IIIF 3.0 defaults (`size="max"`) and `mirror` / `upscale` flags that fold into
   the `!`-rotation and `^`-size prefixes. Callable profiles may now return a
   `Profile` as well as a `dict`.
-- Drop-in `info.json` serving view (`djiiif.views.serve_info_json`) and URLconf
-  (`djiiif.urls`): `path("iiif/", include("djiiif.urls"))` serves `info.json` for
-  stored images with the correct content type and CORS header — no separate image
-  server required for the metadata document.
+- Drop-in serving views (`djiiif.views.serve_info_json` / `serve_manifest`) and
+  URLconf (`djiiif.urls`): `path("iiif/", include("djiiif.urls"))` serves both
+  `info.json` and `manifest` for stored images with the correct content type and
+  CORS header — no separate image server required for the metadata documents.
+- `iiif.as_dict()`: returns every profile URL keyed by profile name (with an
+  `include_meta=True` option to add the `info`/`identifier` URLs) — convenient for
+  templates and JSON responses.
+- Optional Django REST Framework support: `djiiif.serializers.IIIFSerializerField`
+  serializes an `IIIFField` to its `as_dict()` mapping. Install via the new `drf`
+  extra (`pip install djiiif[drf]`); importing `djiiif` never imports DRF.
 - System check `check_iiif_profiles` (registered by the new `DjiiifConfig` app
   config): `manage.py check` now validates `IIIF_PROFILES` at startup, flagging a
   non-`dict` setting or a `dict` profile missing required keys.

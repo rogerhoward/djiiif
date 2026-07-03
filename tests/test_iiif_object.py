@@ -145,3 +145,30 @@ def test_info_url_unchanged_alongside_document():
     # .info remains the external info.json URL, independent of .info_document.
     obj = IIIFObject(FakeParent("uploads/file.jpg", width=400, height=300))
     assert obj.info == "http://server/uploads%2Ffile.jpg/info.json"
+
+
+@override_settings(
+    IIIF_PROFILES={
+        "thumb": DICT_PROFILES["thumbnail"],
+        "square": _square_profile,
+    }
+)
+def test_as_dict_returns_profile_urls():
+    obj = IIIFObject(FakeParent("pic.jpg", width=100, height=200))
+    assert obj.as_dict() == {
+        "thumb": "http://server/pic.jpg/full/150,/0/default.jpg",
+        "square": "http://server/pic.jpg/0,0,100,200/256,256/0/default.jpg",
+    }
+
+
+@override_settings(IIIF_PROFILES=DICT_PROFILES)
+def test_as_dict_include_meta_adds_info_and_identifier():
+    obj = IIIFObject(FakeParent("uploads/file.jpg"))
+    data = obj.as_dict(include_meta=True)
+    assert data["info"] == "http://server/uploads%2Ffile.jpg/info.json"
+    assert data["identifier"] == "http://server/uploads%2Ffile.jpg"
+
+
+@override_settings(IIIF_PROFILES=DICT_PROFILES)
+def test_as_dict_empty_field_is_empty_strings():
+    assert IIIFObject(FakeParent("")).as_dict() == {"thumbnail": ""}

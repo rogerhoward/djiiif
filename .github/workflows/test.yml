@@ -19,5 +19,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install --upgrade pip
-      - run: pip install -e . django pytest pytest-django pytest-cov
+      - run: pip install -e ".[drf]" django pytest pytest-django pytest-cov
       - run: pytest

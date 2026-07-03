@@ -9,7 +9,12 @@ addopts = "--cov=djiiif --cov-report=term-missing --cov-fail-under=90"
 [tool.coverage.run]
 branch = true
 source = ["djiiif"]
-omit = ["djiiif/templatetags/__init__.py"]
+omit = [
+    "djiiif/templatetags/__init__.py",
+    # Optional DRF extra: only importable/tested when djangorestframework is
+    # installed, so it must not gate core coverage.
+    "djiiif/serializers.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
