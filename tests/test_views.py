@@ -57,3 +57,25 @@ def test_serve_info_json_404_when_not_an_image(monkeypatch, rf):
     _patch(monkeypatch, dimensions=(None, None))
     with pytest.raises(Http404):
         views.serve_info_json(rf.get("/iiif/x.txt/info.json"), "x.txt")
+
+
+def test_serve_manifest_returns_document(monkeypatch, rf):
+    _patch(monkeypatch, dimensions=(4000, 3000))
+    request = rf.get("/iiif/photo.jpg/manifest")
+
+    response = views.serve_manifest(request, "photo.jpg")
+
+    assert response["Content-Type"] == "application/ld+json"
+    assert response["Access-Control-Allow-Origin"] == "*"
+    body = json.loads(response.content)
+    assert body["type"] == "Manifest"
+    assert body["id"] == "http://testserver/iiif/photo.jpg/manifest"
+    assert body["label"] == {"none": ["photo.jpg"]}
+    canvas = body["items"][0]
+    assert (canvas["width"], canvas["height"]) == (4000, 3000)
+
+
+def test_serve_manifest_404_when_missing(monkeypatch, rf):
+    _patch(monkeypatch, dimensions=(1, 1), open_raises=FileNotFoundError())
+    with pytest.raises(Http404):
+        views.serve_manifest(rf.get("/iiif/x.jpg/manifest"), "x.jpg")
