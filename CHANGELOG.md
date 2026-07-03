@@ -13,6 +13,14 @@ dates are the commit dates of the corresponding version bump.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-03
+
+First stable release. Marks the public API — `IIIFField` / `IIIFFieldFile` /
+`IIIFObject`, the `.iiif` attributes and generated documents, the `IIIF_PROFILES`
+/ `IIIF_AUTH` config shapes, the typed helpers, the serving views, and the DRF
+field — as stable and covered by the backwards-compatibility policy. No breaking
+changes from 0.24; the bump to 1.0 signals maturity, not a break.
+
 ### Added
 - **Optional IIIF Authorization Flow 2.0 support (metadata-only).** A new opt-in
   `IIIF_AUTH` setting (a `ProbeService`, a `dict`, or a callable returning either
@@ -118,7 +126,8 @@ dates are the commit dates of the corresponding version bump.
   `IIIF_PROFILES`-driven profile URLs (dict and callable shapes), and the
   `{% iiif %}` template tag.
 
-[Unreleased]: https://github.com/rogerhoward/djiiif/compare/v0.24...HEAD
+[Unreleased]: https://github.com/rogerhoward/djiiif/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rogerhoward/djiiif/compare/v0.24...v1.0.0
 [0.24]: https://github.com/rogerhoward/djiiif/compare/v0.23...v0.24
 [0.23]: https://github.com/rogerhoward/djiiif/compare/0.14...v0.23
 [0.22]: https://github.com/rogerhoward/djiiif/releases/tag/0.22
