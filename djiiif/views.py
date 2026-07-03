@@ -1,10 +1,12 @@
-"""A drop-in view that serves a IIIF Image API ``info.json`` from storage.
+"""Drop-in views that serve IIIF documents for stored images.
 
 Mounting :data:`djiiif.urls.urlpatterns` turns a Django instance into a minimal
-level-0 ``info.json`` provider: the view maps an identifier back to a stored
-image, reads its dimensions, and returns the document built by
-:func:`djiiif.build_info_document`. It does not serve derivative pixels — only
-the ``info.json`` metadata document.
+provider of two documents built from a stored image: an Image API ``info.json``
+(:func:`serve_info_json`) and a Presentation API ``manifest``
+(:func:`serve_manifest`). Each maps an identifier back to a stored image, reads
+its dimensions, and returns the document built by the corresponding
+:mod:`djiiif` builder. Neither serves derivative pixels — only the JSON
+documents.
 """
 
 from urllib.parse import unquote
@@ -14,25 +16,18 @@ from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
 from django.http import Http404, JsonResponse
 
-from djiiif import build_info_document
+from djiiif import build_info_document, build_manifest
 
 
-def serve_info_json(request, identifier):
-    """Serve the ``info.json`` document for a stored image.
-
-    The ``identifier`` captured from the URL is percent-decoded back into the
-    storage name, opened via ``default_storage``, and measured. The document's
-    ``id`` is taken from the request URL (minus the ``/info.json`` suffix) so it
-    always matches the URL the document is served from, as the spec requires.
+def _load_dimensions(identifier: str) -> tuple[str, int, int]:
+    """Resolve an encoded identifier to its storage name and pixel dimensions.
 
     Args:
-        request: The incoming ``HttpRequest``.
         identifier: The encoded identifier segment captured by the URLconf.
 
     Returns:
-        A ``JsonResponse`` carrying the ``info.json`` document, with the
-        ``application/ld+json`` content type and a permissive CORS header that
-        IIIF clients require.
+        A ``(name, width, height)`` tuple, where ``name`` is the decoded storage
+        name.
 
     Raises:
         Http404: If the file is missing, outside storage, or not a readable
@@ -53,13 +48,65 @@ def serve_info_json(request, identifier):
     if not width or not height:
         raise Http404("Identifier does not resolve to a readable image.")
 
-    # The document id must equal the base URI it is served from (the request URL
-    # without the trailing "/info.json").
-    id_url = request.build_absolute_uri(request.path).rsplit("/info.json", 1)[0]
+    return name, width, height
 
-    response = JsonResponse(
-        build_info_document(id_url, width, height),
-        content_type="application/ld+json",
-    )
+
+def _ld_json(document: dict) -> JsonResponse:
+    """Wrap a document in a JSON-LD response with the IIIF CORS header.
+
+    Args:
+        document: The IIIF document to serialize.
+
+    Returns:
+        A ``JsonResponse`` with the ``application/ld+json`` content type and a
+        permissive ``Access-Control-Allow-Origin`` header that IIIF clients
+        require.
+    """
+    response = JsonResponse(document, content_type="application/ld+json")
     response["Access-Control-Allow-Origin"] = "*"
     return response
+
+
+def serve_info_json(request, identifier):
+    """Serve the ``info.json`` document for a stored image.
+
+    The document's ``id`` is taken from the request URL (minus the
+    ``/info.json`` suffix) so it always matches the URL the document is served
+    from, as the spec requires.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        identifier: The encoded identifier segment captured by the URLconf.
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the ``info.json`` document.
+
+    Raises:
+        Http404: If the identifier does not resolve to a readable image.
+    """
+    _name, width, height = _load_dimensions(identifier)
+    id_url = request.build_absolute_uri(request.path).rsplit("/info.json", 1)[0]
+    return _ld_json(build_info_document(id_url, width, height))
+
+
+def serve_manifest(request, identifier):
+    """Serve a single-image Presentation API manifest for a stored image.
+
+    The image service base URI is the request URL minus the ``/manifest``
+    suffix, matching the identifier the ``info.json`` view serves. The manifest
+    label defaults to the file's base name.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        identifier: The encoded identifier segment captured by the URLconf.
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the manifest document.
+
+    Raises:
+        Http404: If the identifier does not resolve to a readable image.
+    """
+    name, width, height = _load_dimensions(identifier)
+    id_url = request.build_absolute_uri(request.path).rsplit("/manifest", 1)[0]
+    label = name.rsplit("/", 1)[-1]
+    return _ld_json(build_manifest(id_url, width, height, label=label))

@@ -188,9 +188,9 @@ return JsonResponse(asset.original.iiif.manifest)
 
 Like `info_document`, it reads the image's dimensions from storage and returns `None` for an empty field. The manifest is always Presentation 3.0; its embedded image service follows `IIIF_IMAGE_API_VERSION` (`ImageService3` by default, `ImageService2` when set to `2`).
 
-### Serving info.json from Django
+### Serving info.json and manifests from Django
 
-djiiif can also serve `info.json` itself — no separate image server is required for the metadata document. Include its URLconf:
+djiiif can also serve the `info.json` and `manifest` documents itself — no separate image server is required for the metadata. Include its URLconf:
 
 ```python
 from django.urls import include, path
@@ -200,9 +200,44 @@ urlpatterns = [
 ]
 ```
 
-An image stored as `uploads/photo.jpg` is then served at `/iiif/uploads%2Fphoto.jpg/info.json`, with the `application/ld+json` content type and the CORS header IIIF clients expect. The document's `id` is derived from the request URL, so it always matches where it is served from. The view uses the default storage backend and reads image dimensions on demand.
+An image stored as `uploads/photo.jpg` is then served at `/iiif/uploads%2Fphoto.jpg/info.json` and `/iiif/uploads%2Fphoto.jpg/manifest`, each with the `application/ld+json` content type and the CORS header IIIF clients expect. Each document's `id` is derived from the request URL, so it always matches where it is served from. The views use the default storage backend and read image dimensions on demand.
 
 > Serving identifiers that contain encoded slashes requires your web server to allow encoded slashes in the path (e.g. Apache's `AllowEncodedSlashes On`); flat identifiers need no such configuration.
+
+### All profiles as a dict (`as_dict`)
+
+`iiif.as_dict()` returns every profile URL keyed by profile name — handy for iterating in a template or building a JSON response:
+
+```python
+print(instance.original.iiif.as_dict())
+> {"thumbnail": "http://server/uploads%2Ffilename.jpg/full/150,/0/default.jpg"}
+```
+
+Pass `include_meta=True` to also include the `info` and `identifier` URLs. For an empty field every value is `""`.
+
+### Django REST Framework support
+
+An optional serializer field is available for [DRF](https://www.django-rest-framework.org/) projects. Install the extra:
+
+```
+pip install djiiif[drf]
+```
+
+Then serialize an `IIIFField` to its profile URLs (the `as_dict()` mapping):
+
+```python
+from rest_framework import serializers
+from djiiif.serializers import IIIFSerializerField
+
+class AssetSerializer(serializers.ModelSerializer):
+    original = IIIFSerializerField()          # or IIIFSerializerField(include_meta=True)
+
+    class Meta:
+        model = Asset
+        fields = ["id", "original"]
+```
+
+The field is read-only and emits `{"thumbnail": "…", …}`. Importing `djiiif` itself never imports DRF, so the core package stays dependency-free.
 
 ### Validating your configuration
 

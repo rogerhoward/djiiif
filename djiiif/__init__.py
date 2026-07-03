@@ -397,6 +397,10 @@ class IIIFObject(object):
         """
         self._parent = parent
 
+        # Remember the configured profile names (in order) so as_dict() can
+        # collect their URLs without re-reading settings.
+        self._profile_names = list(settings.IIIF_PROFILES)
+
         # Encode the identifier once; it is shared by every URL below. Empty for
         # an unset field, which drives the empty-string branch throughout.
         identifier = encode_identifier(parent.name) if parent.name else ""
@@ -419,6 +423,26 @@ class IIIFObject(object):
         else:
             self.info = ""
             self.identifier = ""
+
+    def as_dict(self, *, include_meta: bool = False) -> dict[str, str]:
+        """Return the profile URLs as a plain ``dict``, keyed by profile name.
+
+        Handy for JSON APIs (see :mod:`djiiif.serializers`) and for iterating
+        profiles in a template. For an empty/unset field every value is ``""``.
+
+        Args:
+            include_meta: When true, also include the ``info`` and ``identifier``
+                URLs under those keys.
+
+        Returns:
+            A ``{profile_name: url}`` mapping, optionally with ``info`` and
+            ``identifier`` entries appended.
+        """
+        data = {name: getattr(self, name) for name in self._profile_names}
+        if include_meta:
+            data["info"] = self.info
+            data["identifier"] = self.identifier
+        return data
 
     @cached_property
     def info_document(self) -> dict | None:

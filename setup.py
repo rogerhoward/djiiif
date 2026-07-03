@@ -13,6 +13,10 @@ setup(
 
     packages=find_packages(exclude=["tests", "tests.*"]),
     install_requires=['Django'],
+    extras_require={
+        # Optional Django REST Framework support (djiiif.serializers).
+        'drf': ['djangorestframework'],
+    },
     include_package_data=True,
     license='BSD License',  # example license
     description='Simple IIIF integration for Django.',

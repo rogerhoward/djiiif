@@ -42,7 +42,7 @@ Pipenv pins the build/docs/test toolchain (`twine`, `sphinx`, `pytest`, `pytest-
 ## Tests
 
 ```bash
-pip install -e . django pytest pytest-django pytest-cov   # one-time setup (or via Pipenv)
+pip install -e ".[drf]" django pytest pytest-django pytest-cov   # one-time setup (or via Pipenv); [drf] enables the DRF serializer tests
 pytest                                                    # runs all tests + coverage gate
 pytest tests/test_iiif_object.py::test_dict_profile_builds_url   # single test
 ```
@@ -61,7 +61,9 @@ The core is `djiiif/__init__.py`; the other modules are thin, optional add-ons a
   - **Module-level builders** (all public, all reused by the serving view): `encode_identifier(name)` percent-encodes the identifier segment; `resolve_profile(profile, parent)` normalizes any profile shape to a spec `dict`; `image_url(spec, identifier)` assembles the Image API URL; `build_info_document(...)` and `build_manifest(...)` construct the two JSON documents; `_api_version`/`_compliance_level` resolve the version/level settings. `IIIF_CONTEXTS` maps Image API version → `@context` URI; `PRESENTATION_CONTEXT` is the Presentation 3.0 context; `PROFILE_KEYS` is the required-key tuple.
   - `Profile` (frozen dataclass, added 0.24) is the typed, opt-in profile shape with 3.0 defaults (`size="max"`) and `mirror`/`upscale` flags that fold into the `!`-rotation / `^`-size prefixes via `.as_spec()`.
   - `IIIFObject.info_document` and `IIIFObject.manifest` (both `cached_property`, 0.24) are distinct from the eager URL attributes: they return **documents** (`dict`, or `None` for an empty field) built from the image's own `width`/`height`. They are the *only* attributes that read the file from storage, so constructing an `IIIFObject` stays I/O-free (the constructor stores `self._parent` for them). Both honor `IIIF_IMAGE_API_VERSION` (default `3`; `2` switches to 2.x shapes) and `IIIF_COMPLIANCE_LEVEL` (default `"level2"`); an unknown version raises `ImproperlyConfigured`.
-- `djiiif/views.py` + `djiiif/urls.py` (0.24) — optional drop-in `serve_info_json` view and its URLconf. Maps an encoded identifier back to a stored image via `default_storage`, reads dimensions with `get_image_dimensions`, and returns `build_info_document(...)` as `application/ld+json` with a `*` CORS header; the document `id` comes from the request URL. Included via `path("iiif/", include("djiiif.urls"))`; uses default storage only.
+  - `IIIFObject.as_dict(include_meta=False)` returns `{profile_name: url}` for every configured profile (optionally adding `info`/`identifier`), using the `self._profile_names` captured at construction. Backs the DRF serializer and template iteration.
+- `djiiif/views.py` + `djiiif/urls.py` (0.24) — optional drop-in `serve_info_json` / `serve_manifest` views and their URLconf. Each maps an encoded identifier back to a stored image via `default_storage` (shared `_load_dimensions` helper reads dimensions with `get_image_dimensions`), and returns `build_info_document(...)` / `build_manifest(...)` as `application/ld+json` with a `*` CORS header (shared `_ld_json` helper); the document `id` comes from the request URL. Included via `path("iiif/", include("djiiif.urls"))`; uses default storage only.
+- `djiiif/serializers.py` (0.24) — **optional** DRF field `IIIFSerializerField` (read-only; `to_representation` returns `iiif.as_dict(...)`). Imports `rest_framework`, so it is an extra (`pip install djiiif[drf]`, `extras_require` in `setup.py`) and is **never imported by `djiiif/__init__.py`** — the core package has no DRF dependency. It is omitted from the coverage source (its tests `importorskip` DRF and CI installs the `drf` extra to run them).
 - `djiiif/checks.py` + `djiiif/apps.py` (0.24) — `DjiiifConfig.ready()` registers `check_iiif_profiles`, a system check that validates `IIIF_PROFILES` at startup (ids `djiiif.W001`/`E001`/`E002`/`E003`). Callable and `Profile` entries pass unchecked (a callable's shape is only knowable at call time).
 - `djiiif/templatetags/iiiftags.py` — registers the `{% iiif imagefield 'profile' %}` template tag. The tag just does `getattr(imagefield.iiif, profile)`, so it delegates to the real `IIIFObject` via `IIIFFieldFile.iiif`.
 - `djiiif/templatetags/__init__.py` — **dead code**: contains an out-of-sync duplicate of `IIIFObject` / `IIIFField` / `urljoin`. Nothing imports it. Treat `djiiif/__init__.py` as the source of truth; this file should be emptied as part of cleanup.
@@ -96,7 +98,9 @@ Every change to `djiiif/` must keep the suite green and the coverage gate satisf
 - `info_document`: the default (v3) and `IIIF_IMAGE_API_VERSION=2` document shapes, the `IIIF_COMPLIANCE_LEVEL` override, `None` for an empty field, the `ImproperlyConfigured` unknown-version path, and that `.info` (the URL) is unchanged alongside it.
 - `Profile`: the 3.0 defaults, the `mirror`/`upscale` prefix folding (including the no-double-prefix guards), and that a `Profile` works as an `IIIF_PROFILES` entry; `resolve_profile` for dict/`Profile`/callable inputs plus its two `ImproperlyConfigured` rejection paths.
 - `manifest`: the Presentation-3.0 top-level shape, the nested canvas/image body, the `ImageService2` (v2) variant, and `None` for an empty field.
-- The `serve_info_json` view: the happy path (document body, `application/ld+json`, CORS header) and its `Http404` paths (missing file, non-image).
+- `as_dict`: the profile mapping, the `include_meta=True` extras, and the empty-field (`""`) case.
+- The `serve_info_json` and `serve_manifest` views: the happy path (document body, `application/ld+json`, CORS header) and their `Http404` paths (missing file, non-image).
+- `IIIFSerializerField` (when DRF is installed): the serialized mapping, the `include_meta` variant, and the read-only default. The test module must `importorskip("rest_framework")` so the suite still passes without the `drf` extra.
 - `check_iiif_profiles`: valid profiles pass; the `W001` (unset), `E001` (non-dict), `E002` (bad type), and `E003` (missing keys) paths each fire.
 - The empty-`IIIF_PROFILES` path must not raise (`info`/`identifier` are `""`, documents are `None`).
 
