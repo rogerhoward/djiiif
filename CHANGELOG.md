@@ -13,6 +13,18 @@ dates are the commit dates of the corresponding version bump.
 
 ## [Unreleased]
 
+### Added
+- **Optional IIIF Authorization Flow 2.0 support (metadata-only).** A new opt-in
+  `IIIF_AUTH` setting (a `ProbeService`, a `dict`, or a callable returning either
+  or `None`, mirroring `IIIF_PROFILES`) embeds an Auth 2.0 `service` block in the
+  generated `info_document` and `manifest`, so viewers can authenticate against an
+  image server that implements Auth 2.0 (e.g. iiiris). New typed helpers
+  `ProbeService` / `AccessService` / `TokenService` / `LogoutService` build the
+  nested block. djiiif only describes the services; the image server implements
+  and enforces them. Auth 2.0 requires `IIIF_IMAGE_API_VERSION = 3` (raises
+  `ImproperlyConfigured` on v2). Documents are unchanged when `IIIF_AUTH` is unset.
+  See `briefs/AUTH-API.md`.
+
 ## [0.24] - 2026-07-03
 
 ### Added
