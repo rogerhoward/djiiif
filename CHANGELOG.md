@@ -13,6 +13,8 @@ dates are the commit dates of the corresponding version bump.
 
 ## [Unreleased]
 
+## [0.24] - 2026-07-03
+
 ### Added
 - `iiif.info_document`: returns the IIIF `info.json` **document** itself (a
   `dict`, or `None` for an empty field), assembled from the image's own
@@ -104,7 +106,8 @@ dates are the commit dates of the corresponding version bump.
   `IIIF_PROFILES`-driven profile URLs (dict and callable shapes), and the
   `{% iiif %}` template tag.
 
-[Unreleased]: https://github.com/rogerhoward/djiiif/compare/v0.23...HEAD
+[Unreleased]: https://github.com/rogerhoward/djiiif/compare/v0.24...HEAD
+[0.24]: https://github.com/rogerhoward/djiiif/compare/v0.23...v0.24
 [0.23]: https://github.com/rogerhoward/djiiif/compare/0.14...v0.23
 [0.22]: https://github.com/rogerhoward/djiiif/releases/tag/0.22
 [0.21]: https://github.com/rogerhoward/djiiif/releases/tag/0.21
