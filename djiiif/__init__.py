@@ -14,11 +14,19 @@ service (a :class:`ProbeService`, a ``dict``, or a callable returning either or
 ``None``); when set, its ``service`` block is embedded in the generated
 ``info_document`` / ``manifest`` for access-controlled images (see
 :func:`resolve_auth`).
+
+The module also provides IIIF Content State API 1.0 helpers
+(:func:`encode_content_state` / :func:`decode_content_state` /
+:func:`build_content_state`, plus :meth:`IIIFObject.content_state`) for building
+the shareable ``iiif-content=`` deep links that open an image — optionally zoomed
+to a region — in a manifest-aware viewer.
 """
 
+import base64
+import json
 from dataclasses import dataclass
 from functools import cached_property
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -462,6 +470,38 @@ def build_info_document(
     return document
 
 
+def _manifest_uri(id_url: str) -> str:
+    """Return the synthetic Manifest URI derived from an image service base URI.
+
+    The single derivation point shared by :func:`build_manifest` and
+    :func:`build_content_state` (via :meth:`IIIFObject.content_state`) so the two
+    can never drift.
+
+    Args:
+        id_url: The image service base URI (``{host}/{identifier}``).
+
+    Returns:
+        The ``{id_url}/manifest`` URI.
+    """
+    return urljoin([id_url, "manifest"])
+
+
+def _canvas_uri(id_url: str, index: int = 1) -> str:
+    """Return the synthetic Canvas URI derived from an image service base URI.
+
+    Shared derivation point (see :func:`_manifest_uri`); the 1-based ``index``
+    matches the single-image manifest's ``{id_url}/canvas/1``.
+
+    Args:
+        id_url: The image service base URI (``{host}/{identifier}``).
+        index: The 1-based canvas index.
+
+    Returns:
+        The ``{id_url}/canvas/{index}`` URI.
+    """
+    return urljoin([id_url, "canvas", str(index)])
+
+
 def build_manifest(
     id_url: str,
     width: int,
@@ -526,10 +566,10 @@ def build_manifest(
     # image annotation body — alongside its image service.
     body_services = [service] if auth is None else [service, auth]
 
-    canvas_id = urljoin([id_url, "canvas", "1"])
+    canvas_id = _canvas_uri(id_url)
     return {
         "@context": PRESENTATION_CONTEXT,
-        "id": urljoin([id_url, "manifest"]),
+        "id": _manifest_uri(id_url),
         "type": "Manifest",
         "label": {"none": [label]},
         "items": [
@@ -562,6 +602,104 @@ def build_manifest(
                 ],
             }
         ],
+    }
+
+
+def encode_content_state(state: dict | str) -> str:
+    """Encode a content state for use as an ``iiif-content`` query parameter.
+
+    Implements the IIIF Content State API 1.0 §6 encoding: serialize to JSON
+    (when given a ``dict``), percent-encode the UTF-8 string exactly as
+    JavaScript's ``encodeURIComponent`` does, base64url-encode that, and strip the
+    ``=`` padding. The percent-encoding step is part of the spec — the resulting
+    string round-trips through any viewer's ``decodeURIComponent``.
+
+    Args:
+        state: A content-state ``dict`` (e.g. from :func:`build_content_state`)
+            or a bare resource-URI ``str`` (the spec's trivial form).
+
+    Returns:
+        The URL-safe, unpadded encoded string.
+    """
+    text = state if isinstance(state, str) else json.dumps(state, separators=(",", ":"))
+    # encodeURIComponent leaves A-Z a-z 0-9 - _ . ! ~ * ' ( ) unescaped; quote
+    # already treats the alphanumerics and -_.~ as safe, so only the punctuation
+    # differs from quote's default reserved set.
+    percent_encoded = quote(text, safe="!~*'()")
+    encoded = base64.urlsafe_b64encode(percent_encoded.encode("utf-8")).decode("ascii")
+    return encoded.rstrip("=")
+
+
+def decode_content_state(encoded: str) -> dict | str:
+    """Decode an ``iiif-content`` value back into a content state.
+
+    The inverse of :func:`encode_content_state`: restore the stripped base64url
+    padding, base64url-decode, reverse the percent-encoding, and ``json.loads``
+    the result. A payload that is not JSON (a bare resource-URI string) is
+    returned verbatim.
+
+    Args:
+        encoded: The encoded string from an ``iiif-content`` parameter.
+
+    Returns:
+        The decoded content-state ``dict``, or the bare URI ``str`` for a
+        non-JSON payload.
+    """
+    padding = "=" * (-len(encoded) % 4)
+    percent_encoded = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+    text = unquote(percent_encoded)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return text
+
+
+def _format_xywh(xywh: str | tuple[int, int, int, int]) -> str:
+    """Normalize an ``xywh`` region into the ``x,y,w,h`` media-fragment string.
+
+    Args:
+        xywh: A preformatted ``"x,y,w,h"`` string (used verbatim) or a 4-tuple
+            of ints (formatted to ``x,y,w,h``).
+
+    Returns:
+        The ``x,y,w,h`` string.
+    """
+    if isinstance(xywh, str):
+        return xywh
+    return ",".join(str(v) for v in xywh)
+
+
+def build_content_state(
+    manifest_id: str,
+    *,
+    canvas_id: str | None = None,
+    xywh: str | tuple[int, int, int, int] | None = None,
+) -> dict:
+    """Build a IIIF Content State API 1.0 annotation targeting a resource.
+
+    Produces the spec's simplified target forms (Content State API 1.0 §3.2):
+    with only ``manifest_id`` the state targets the Manifest; with ``canvas_id``
+    it targets that Canvas and carries a ``partOf`` back to the Manifest; ``xywh``
+    appends an ``#xywh=`` media-fragment to the canvas id to select a region.
+
+    Args:
+        manifest_id: The Manifest URI (e.g. ``{host}/{identifier}/manifest``).
+        canvas_id: The Canvas URI to target within the manifest; omit to target
+            the whole Manifest.
+        xywh: An optional region as an ``x,y,w,h`` string or 4-tuple of ints.
+            Ignored when ``canvas_id`` is ``None``.
+
+    Returns:
+        The content-state ``dict``, ready for :func:`encode_content_state`.
+    """
+    if canvas_id is None:
+        return {"id": manifest_id, "type": "Manifest"}
+
+    target_id = canvas_id if xywh is None else f"{canvas_id}#xywh={_format_xywh(xywh)}"
+    return {
+        "id": target_id,
+        "type": "Canvas",
+        "partOf": [{"id": manifest_id, "type": "Manifest"}],
     }
 
 
@@ -689,6 +827,40 @@ class IIIFObject(object):
             label=label,
             auth=resolve_auth(self._parent),
         )
+
+    def content_state(
+        self,
+        *,
+        xywh: str | tuple[int, int, int, int] | None = None,
+        encoded: bool = True,
+    ) -> str | dict | None:
+        """Build a IIIF Content State for a shareable deep link to this image.
+
+        Targets this image's own Canvas (with a ``partOf`` back to its Manifest),
+        deriving both URIs the same way :attr:`manifest` does — so the state opens
+        the exact image the manifest describes. Pass ``xywh`` to open zoomed to a
+        region. Unlike :attr:`manifest`, this reads nothing from storage.
+
+        Args:
+            xywh: An optional region as an ``x,y,w,h`` string or 4-tuple of ints;
+                omit for a whole-image state.
+            encoded: When true (default), return the URL-safe encoded string
+                ready to drop into ``?iiif-content=``; when false, return the raw
+                content-state ``dict``.
+
+        Returns:
+            The encoded string (``""`` for an empty/unset field), or the raw
+            ``dict`` (``None`` for an empty/unset field) when ``encoded`` is
+            false.
+        """
+        if not self.identifier:
+            return "" if encoded else None
+        state = build_content_state(
+            _manifest_uri(self.identifier),
+            canvas_id=_canvas_uri(self.identifier),
+            xywh=xywh,
+        )
+        return encode_content_state(state) if encoded else state
 
 
 class IIIFFieldFile(ImageFieldFile):

@@ -13,6 +13,20 @@ dates are the commit dates of the corresponding version bump.
 
 ## [Unreleased]
 
+### Added
+- **IIIF Content State API 1.0 helpers** for shareable viewer deep links. New
+  module-level functions `encode_content_state` / `decode_content_state`
+  (spec §6 base64url encoding, incl. the `encodeURIComponent` percent-encoding
+  step) and `build_content_state` (targets a Manifest, a Canvas with `partOf`,
+  or a Canvas region via `xywh`), plus `iiif.content_state(xywh=..., encoded=...)`
+  which derives this image's own manifest/canvas URIs (the same ones
+  `iiif.manifest` emits) with no file I/O, and a `{% iiif_content_state image %}`
+  /`{% iiif_content_state image xywh='x,y,w,h' %}` template tag. Drop the result
+  into `?iiif-content=` to open an image — optionally zoomed to a region — in
+  Mirador, Theseus, or any content-state-aware viewer. Purely additive; no new
+  settings, views, or dependencies, and no change to existing output. See
+  `briefs/CONTENT-STATE.md`.
+
 ## [1.0.0] - 2026-07-03
 
 First stable release. Marks the public API — `IIIFField` / `IIIFFieldFile` /

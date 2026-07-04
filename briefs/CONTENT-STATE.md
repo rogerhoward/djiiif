@@ -1,7 +1,7 @@
 # CONTENT-STATE — IIIF Content State API 1.0 helpers (share/deep-link support)
 
-**Status:** Proposed — all questions resolved, ready to implement
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `iiif-api-briefs`
+**Branch:** `iiif-api-briefs`
 **Date:** 2026-07-03
 
 ## Problem

@@ -188,6 +188,33 @@ return JsonResponse(asset.original.iiif.manifest)
 
 Like `info_document`, it reads the image's dimensions from storage and returns `None` for an empty field. The manifest is always Presentation 3.0; its embedded image service follows `IIIF_IMAGE_API_VERSION` (`ImageService3` by default, `ImageService2` when set to `2`).
 
+### Share links / content state
+
+Because djiiif can describe an image's manifest, it can also build a [IIIF Content State API 1.0](https://iiif.io/api/content-state/1.0/) deep link — a shareable URL that opens the image (optionally zoomed to a region) in any content-state-aware viewer such as [Mirador](https://projectmirador.org/) or [Theseus](https://theseusviewer.org/). `iiif.content_state()` returns the URL-safe, encoded string ready to drop into `?iiif-content=`:
+
+```python
+state = photo.image.iiif.content_state(xywh="1000,2000,1000,2000")
+# -> "JTdCJTIyaWQlMjIlM0El…"  (URL-safe, no padding)
+
+# Whole image (no region):
+photo.image.iiif.content_state()
+
+# The raw content-state dict instead of the encoded string:
+photo.image.iiif.content_state(xywh=(1000, 2000, 1000, 2000), encoded=False)
+```
+
+`xywh` accepts either a preformatted `"x,y,w,h"` string or a 4-tuple of ints. Empty/unset fields return `""` (or `None` for `encoded=False`). It reads nothing from storage.
+
+In a template, the `{% iiif_content_state %}` tag emits the encoded string directly:
+
+```django
+<a href="https://theseusviewer.org/?iiif-content={% iiif_content_state photo.image xywh='1000,2000,1000,2000' %}">
+  Open this detail in Theseus
+</a>
+```
+
+The module-level builders are available too for lower-level use: `build_content_state(manifest_id, canvas_id=..., xywh=...)` assembles the annotation dict, and `encode_content_state` / `decode_content_state` are the spec §6 base64url encode/decode pair (usable, for example, in a view that decodes an inbound `iiif-content` parameter).
+
 ### Serving info.json and manifests from Django
 
 djiiif can also serve the `info.json` and `manifest` documents itself — no separate image server is required for the metadata. Include its URLconf:

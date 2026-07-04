@@ -22,3 +22,27 @@ def iiif(imagefield, profile):
         return getattr(imagefield.iiif, profile)
     except AttributeError:
         raise NotAnIIIFField('The iiif template tag expects an instance of a IIIFField as its first parameter.')
+
+
+@register.simple_tag
+def iiif_content_state(imagefield, xywh=None):
+    """Returns an encoded IIIF Content State for an IIIFField deep link.
+
+    Drop the result into ``?iiif-content=`` to open the image — optionally zoomed
+    to the ``xywh`` region — in a manifest-aware viewer.
+
+    Args:
+        imagefield: An ``IIIFField`` instance (its ``.iiif`` accessor is used).
+        xywh: An optional ``"x,y,w,h"`` region string.
+
+    Raises:
+        NotAnIIIFField: If ``imagefield`` is not an ``IIIFField`` instance.
+    """
+    try:
+        iiif = imagefield.iiif
+    except AttributeError:
+        raise NotAnIIIFField(
+            'The iiif_content_state template tag expects an instance of a IIIFField '
+            'as its first parameter.'
+        )
+    return iiif.content_state(xywh=xywh)
