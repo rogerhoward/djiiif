@@ -13,6 +13,38 @@ dates are the commit dates of the corresponding version bump.
 
 ## [Unreleased]
 
+### Added
+- **Richer Presentation 3.0 manifests — descriptive properties.** `build_manifest`
+  now accepts optional keyword descriptors `metadata`, `rights`,
+  `required_statement`, `summary`, `thumbnail`, and `nav_date` (each emitted only
+  when given, so default output is byte-identical). A new opt-in
+  `IIIF_MANIFEST_DESCRIPTORS` setting — a `dict` of those kwargs or a callable
+  receiving the field file and returning one (or `None`) — flows per-image
+  descriptive metadata into `iiif.manifest` without djiiif knowing your model. An
+  unknown descriptor key raises `ImproperlyConfigured`.
+- **Multi-image manifests.** New `build_multi_manifest(id_url, images, *, label,
+  …)` builder presents several images as one manifest with indexed canvases;
+  `build_manifest` is now a thin single-image wrapper over it (output unchanged).
+  A resolved `IIIF_AUTH` block applies to every image body.
+- **Collections.** New `build_collection(id_url, items, *, label, **descriptors)`
+  builder emits a Presentation 3.0 `Collection` of manifest *references*, plus an
+  optional drop-in `serve_collection` view (mounted at `/iiif/collection` by
+  `djiiif.urls`) driven by the `IIIF_COLLECTION_SOURCE` setting (unset ⇒ 404;
+  `IIIF_COLLECTION_LABEL` sets the collection label). See
+  `briefs/PRESENTATION-ENRICHMENT.md`. All three pieces are purely additive.
+- **IIIF Content State API 1.0 helpers** for shareable viewer deep links. New
+  module-level functions `encode_content_state` / `decode_content_state`
+  (spec §6 base64url encoding, incl. the `encodeURIComponent` percent-encoding
+  step) and `build_content_state` (targets a Manifest, a Canvas with `partOf`,
+  or a Canvas region via `xywh`), plus `iiif.content_state(xywh=..., encoded=...)`
+  which derives this image's own manifest/canvas URIs (the same ones
+  `iiif.manifest` emits) with no file I/O, and a `{% iiif_content_state image %}`
+  /`{% iiif_content_state image xywh='x,y,w,h' %}` template tag. Drop the result
+  into `?iiif-content=` to open an image — optionally zoomed to a region — in
+  Mirador, Theseus, or any content-state-aware viewer. Purely additive; no new
+  settings, views, or dependencies, and no change to existing output. See
+  `briefs/CONTENT-STATE.md`.
+
 ## [1.0.0] - 2026-07-03
 
 First stable release. Marks the public API — `IIIFField` / `IIIFFieldFile` /

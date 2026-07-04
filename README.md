@@ -188,6 +188,84 @@ return JsonResponse(asset.original.iiif.manifest)
 
 Like `info_document`, it reads the image's dimensions from storage and returns `None` for an empty field. The manifest is always Presentation 3.0; its embedded image service follows `IIIF_IMAGE_API_VERSION` (`ImageService3` by default, `ImageService2` when set to `2`).
 
+### Share links / content state
+
+Because djiiif can describe an image's manifest, it can also build a [IIIF Content State API 1.0](https://iiif.io/api/content-state/1.0/) deep link — a shareable URL that opens the image (optionally zoomed to a region) in any content-state-aware viewer such as [Mirador](https://projectmirador.org/) or [Theseus](https://theseusviewer.org/). `iiif.content_state()` returns the URL-safe, encoded string ready to drop into `?iiif-content=`:
+
+```python
+state = photo.image.iiif.content_state(xywh="1000,2000,1000,2000")
+# -> "JTdCJTIyaWQlMjIlM0El…"  (URL-safe, no padding)
+
+# Whole image (no region):
+photo.image.iiif.content_state()
+
+# The raw content-state dict instead of the encoded string:
+photo.image.iiif.content_state(xywh=(1000, 2000, 1000, 2000), encoded=False)
+```
+
+`xywh` accepts either a preformatted `"x,y,w,h"` string or a 4-tuple of ints. Empty/unset fields return `""` (or `None` for `encoded=False`). It reads nothing from storage.
+
+In a template, the `{% iiif_content_state %}` tag emits the encoded string directly:
+
+```django
+<a href="https://theseusviewer.org/?iiif-content={% iiif_content_state photo.image xywh='1000,2000,1000,2000' %}">
+  Open this detail in Theseus
+</a>
+```
+
+The module-level builders are available too for lower-level use: `build_content_state(manifest_id, canvas_id=..., xywh=...)` assembles the annotation dict, and `encode_content_state` / `decode_content_state` are the spec §6 base64url encode/decode pair (usable, for example, in a view that decodes an inbound `iiif-content` parameter).
+
+### Describing your images (manifest metadata)
+
+By default `iiif.manifest` is a bare image on a canvas. Set `IIIF_MANIFEST_DESCRIPTORS` to a callable — receiving the field file, returning a dict of descriptive properties (or `None`) — to turn it into a catalog record viewers actually render:
+
+```python
+def manifest_descriptors(parent):
+    photo = parent.instance
+    return {
+        "metadata": [("Title", photo.title), ("Date", str(photo.year))],
+        "summary": photo.caption,
+        "rights": "http://creativecommons.org/licenses/by/4.0/",
+        "required_statement": ("Attribution", "Example Institution"),
+        "thumbnail": photo.image.iiif.thumbnail,   # an existing profile URL
+        "nav_date": photo.created,                  # an aware datetime
+    }
+
+IIIF_MANIFEST_DESCRIPTORS = manifest_descriptors
+```
+
+A plain dict works too (the same descriptors for every image). Each property is emitted only when present, so an unset `IIIF_MANIFEST_DESCRIPTORS` leaves the manifest byte-identical to before. `metadata` accepts `(label, value)` pairs or preformed dicts; label-ish values accept a string, a list, or a IIIF language map; an unknown key raises `ImproperlyConfigured`. The same keyword descriptors can be passed directly to `build_manifest(...)`.
+
+### Multi-image objects
+
+A model with several images (recto/verso, a paged object, detail shots) can be presented as one manifest with `build_multi_manifest`:
+
+```python
+from djiiif import build_multi_manifest
+
+def object_manifest(obj):
+    images = [
+        (page.image.iiif.identifier, page.image.width, page.image.height)
+        for page in obj.pages.all()
+    ]
+    return build_multi_manifest(obj.iiif_id, images, label=obj.title)
+```
+
+Each image spec is a `(service_id_url, width, height)` tuple, or a dict adding an optional per-canvas `label`. Canvases are indexed (`.../canvas/1`, `/2`, …); descriptor kwargs and `IIIF_AUTH` apply as they do for a single-image manifest.
+
+### Collections
+
+`build_collection` renders a queryset as a IIIF `Collection` of manifest *references* — a browsable group, and the anchor an aggregator points at:
+
+```python
+from djiiif import build_collection
+
+items = [(p.iiif_manifest_url, p.title) for p in album.photos.all()]
+collection = build_collection(album.iiif_url, items, label=album.title)
+```
+
+Each item is `(manifest_url, label)` (optionally a third `thumbnail`). To serve one directly, set `IIIF_COLLECTION_SOURCE` to a callable returning such items — it is exposed at `/iiif/collection` by `djiiif.urls` (unset ⇒ 404; `IIIF_COLLECTION_LABEL` sets the label). The response references manifests by URL only, so it stays small even for thousands of items.
+
 ### Serving info.json and manifests from Django
 
 djiiif can also serve the `info.json` and `manifest` documents itself — no separate image server is required for the metadata. Include its URLconf:
