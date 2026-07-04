@@ -1,7 +1,7 @@
 # PRESENTATION-ENRICHMENT — richer Presentation 3.0: descriptive metadata, multi-image manifests, Collections
 
-**Status:** Proposed — all questions resolved, ready to implement
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `presentation-enrichment`
+**Branch:** `presentation-enrichment`
 **Date:** 2026-07-03
 
 ## Problem
