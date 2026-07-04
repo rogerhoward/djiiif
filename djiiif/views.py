@@ -11,12 +11,13 @@ documents.
 
 from urllib.parse import unquote
 
+from django.conf import settings
 from django.core.exceptions import SuspiciousOperation
 from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
 from django.http import Http404, JsonResponse
 
-from djiiif import build_info_document, build_manifest
+from djiiif import build_collection, build_info_document, build_manifest
 
 
 def _load_dimensions(identifier: str) -> tuple[str, int, int]:
@@ -110,3 +111,34 @@ def serve_manifest(request, identifier):
     id_url = request.build_absolute_uri(request.path).rsplit("/manifest", 1)[0]
     label = name.rsplit("/", 1)[-1]
     return _ld_json(build_manifest(id_url, width, height, label=label))
+
+
+def serve_collection(request):
+    """Serve a IIIF Collection of manifest references.
+
+    Driven by the ``IIIF_COLLECTION_SOURCE`` setting — a callable returning an
+    iterable of member entries (``(manifest_url, label[, thumbnail])`` tuples or
+    preformed member dicts, per :func:`djiiif.build_collection`) and, optionally,
+    a ``label`` for the collection itself. When the setting is unset the endpoint
+    does not exist, so it returns ``404``.
+
+    The collection's ``id`` is the request URL, so it always matches where it is
+    served from. The response reads no image storage — it references manifests by
+    URL only.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the Collection document.
+
+    Raises:
+        Http404: If ``IIIF_COLLECTION_SOURCE`` is unset.
+    """
+    source = getattr(settings, "IIIF_COLLECTION_SOURCE", None)
+    if source is None:
+        raise Http404("No IIIF collection is configured.")
+    label = getattr(settings, "IIIF_COLLECTION_LABEL", "Collection")
+    id_url = request.build_absolute_uri(request.path).rstrip("/")
+    items = source() if callable(source) else source
+    return _ld_json(build_collection(id_url, list(items), label=label))

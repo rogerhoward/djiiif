@@ -25,6 +25,7 @@ to a region — in a manifest-aware viewer.
 import base64
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from functools import cached_property
 from urllib.parse import quote, unquote
 
@@ -502,107 +503,441 @@ def _canvas_uri(id_url: str, index: int = 1) -> str:
     return urljoin([id_url, "canvas", str(index)])
 
 
+# The descriptive-property kwargs the manifest/collection builders accept, mapped
+# to their IIIF (camelCase) property names. Used both to validate a descriptor
+# bag (reject typos loudly) and to build the property fragment.
+DESCRIPTOR_KEYS = ("metadata", "rights", "required_statement", "summary", "thumbnail", "nav_date")
+
+
+def _reject_unknown_descriptors(descriptors: dict) -> None:
+    """Reject a descriptor bag carrying keys the builders do not understand.
+
+    The descriptor bag is a plain kwarg dict (not a fixed-shape spec object), so
+    an unrecognized key is almost always a typo (``metdata``, ``rght``). Failing
+    loudly here mirrors the ``IIIF_AUTH``-at-v2 posture.
+
+    Args:
+        descriptors: The descriptor kwargs (e.g. from ``IIIF_MANIFEST_DESCRIPTORS``
+            or a direct builder call).
+
+    Raises:
+        ImproperlyConfigured: If any key is not in :data:`DESCRIPTOR_KEYS`.
+    """
+    unknown = set(descriptors) - set(DESCRIPTOR_KEYS)
+    if unknown:
+        raise ImproperlyConfigured(
+            f"Unknown manifest descriptor key(s): {', '.join(sorted(unknown))}. "
+            f"Allowed keys are: {', '.join(DESCRIPTOR_KEYS)}."
+        )
+
+
+def _metadata_pairs(metadata: list) -> list[dict]:
+    """Coerce descriptive ``metadata`` into IIIF ``{label, value}`` pairs.
+
+    Args:
+        metadata: A list whose items are either ``(label, value)`` pairs (each
+            side coerced via :func:`_language_map`) or already-formed
+            ``{"label": …, "value": …}`` dicts (passed through unchanged).
+
+    Returns:
+        The list of language-mapped metadata pair dicts.
+    """
+    pairs = []
+    for item in metadata:
+        if isinstance(item, dict):
+            pairs.append(item)
+        else:
+            label, value = item
+            pairs.append({"label": _language_map(label), "value": _language_map(value)})
+    return pairs
+
+
+def _label_value(pair) -> dict:
+    """Coerce a ``(label, value)`` pair into a IIIF label/value dict.
+
+    Args:
+        pair: A ``(label, value)`` tuple (each side coerced via
+            :func:`_language_map`) or an already-formed dict (passed through).
+
+    Returns:
+        A ``{"label": …, "value": …}`` dict.
+    """
+    if isinstance(pair, dict):
+        return pair
+    label, value = pair
+    return {"label": _language_map(label), "value": _language_map(value)}
+
+
+def _thumbnail(thumbnail: str | list) -> list:
+    """Coerce a ``thumbnail`` into the IIIF thumbnail list shape.
+
+    Args:
+        thumbnail: A single URL string (wrapped as ``[{"id": …, "type":
+            "Image"}]``) or an already-formed list of thumbnail dicts.
+
+    Returns:
+        The thumbnail list.
+    """
+    if isinstance(thumbnail, str):
+        return [{"id": thumbnail, "type": "Image"}]
+    return thumbnail
+
+
+def _descriptive_properties(descriptors: dict) -> dict:
+    """Build the IIIF descriptive-property fragment from a descriptor bag.
+
+    Every property is emitted only when its key is present and non-``None``, so an
+    empty (or all-``None``) bag contributes nothing and leaves the surrounding
+    document byte-identical to one built without descriptors.
+
+    Args:
+        descriptors: A validated descriptor bag (keys in :data:`DESCRIPTOR_KEYS`).
+
+    Returns:
+        A dict of IIIF descriptive properties (``metadata``, ``summary``,
+        ``requiredStatement``, ``rights``, ``navDate``, ``thumbnail``) in spec
+        property order, ready to merge into a Manifest or Collection.
+    """
+    props: dict = {}
+    metadata = descriptors.get("metadata")
+    if metadata is not None:
+        props["metadata"] = _metadata_pairs(metadata)
+    summary = descriptors.get("summary")
+    if summary is not None:
+        props["summary"] = _language_map(summary)
+    required_statement = descriptors.get("required_statement")
+    if required_statement is not None:
+        props["requiredStatement"] = _label_value(required_statement)
+    rights = descriptors.get("rights")
+    if rights is not None:
+        props["rights"] = rights
+    nav_date = descriptors.get("nav_date")
+    if nav_date is not None:
+        props["navDate"] = nav_date.isoformat() if isinstance(nav_date, datetime) else nav_date
+    thumbnail = descriptors.get("thumbnail")
+    if thumbnail is not None:
+        props["thumbnail"] = _thumbnail(thumbnail)
+    return props
+
+
+def resolve_manifest_descriptors(parent) -> dict:
+    """Resolve ``settings.IIIF_MANIFEST_DESCRIPTORS`` to a descriptor bag.
+
+    Mirrors :func:`resolve_auth`: the setting may be a plain ``dict`` of
+    descriptor kwargs, a callable receiving the field file and returning such a
+    ``dict`` (or ``None`` for no descriptors), or unset. This is how per-image
+    descriptive metadata flows into :attr:`IIIFObject.manifest` without djiiif
+    knowing the model.
+
+    Args:
+        parent: The :class:`IIIFFieldFile` passed to a callable config.
+
+    Returns:
+        A validated descriptor bag (empty when unset or resolved to ``None``).
+
+    Raises:
+        ImproperlyConfigured: If the (resolved) value is neither a ``dict`` nor
+            ``None``, or carries an unknown descriptor key.
+    """
+    hook = getattr(settings, "IIIF_MANIFEST_DESCRIPTORS", None)
+    if hook is None:
+        return {}
+    descriptors = hook(parent) if callable(hook) else hook
+    if descriptors is None:
+        return {}
+    if not isinstance(descriptors, dict):
+        raise ImproperlyConfigured(
+            "IIIF_MANIFEST_DESCRIPTORS must be a dict, a callable returning a dict "
+            f"or None, or unset; got {type(descriptors).__name__}."
+        )
+    _reject_unknown_descriptors(descriptors)
+    return descriptors
+
+
+def _normalize_image_spec(image) -> tuple[str, int, int, object]:
+    """Normalize one :func:`build_multi_manifest` image spec.
+
+    Args:
+        image: Either a ``(service_id_url, width, height)`` tuple or a dict with
+            ``id`` / ``width`` / ``height`` keys and an optional per-canvas
+            ``label``.
+
+    Returns:
+        A ``(service_id_url, width, height, label)`` tuple, where ``label`` is
+        ``None`` when unspecified.
+    """
+    if isinstance(image, dict):
+        return image["id"], image["width"], image["height"], image.get("label")
+    service_id_url, width, height = image
+    return service_id_url, width, height, None
+
+
+def _build_canvas(
+    manifest_id_url: str,
+    index: int,
+    service_id_url: str,
+    width: int,
+    height: int,
+    *,
+    label,
+    version: int,
+    level: str,
+    auth: dict | None,
+) -> dict:
+    """Assemble one Canvas (with its painting annotation) for a manifest.
+
+    The single canvas-assembly code path shared by every manifest — the
+    single-image :func:`build_manifest` is just this called once. Canvas,
+    annotation-page, and annotation ``id`` URIs derive from ``manifest_id_url``
+    with the 1-based ``index``; the image body and its service derive from this
+    image's own ``service_id_url`` (which equals ``manifest_id_url`` in the
+    single-image case).
+
+    Args:
+        manifest_id_url: The manifest's image service base URI, the stem for the
+            synthetic canvas/annotation URIs.
+        index: The 1-based canvas index.
+        service_id_url: This image's own service base URI.
+        width: Image width in pixels.
+        height: Image height in pixels.
+        label: Optional per-canvas label (coerced via :func:`_language_map`);
+            omitted from the canvas when ``None``.
+        version: The resolved Image API version (``2`` or ``3``).
+        level: The resolved compliance level.
+        auth: The resolved probe-service ``dict`` applied to the image body, or
+            ``None``.
+
+    Returns:
+        The Canvas dict.
+    """
+    # v3 uses the "max" size keyword; v2 uses "full" for a full-resolution image.
+    full_size = "max" if version == 3 else "full"
+    image_id = urljoin([service_id_url, "full", full_size, "0", "default.jpg"])
+
+    if version == 2:
+        service = {
+            "@id": service_id_url,
+            "@type": "ImageService2",
+            "profile": f"http://iiif.io/api/image/2/{level}.json",
+        }
+    else:
+        service = {"id": service_id_url, "type": "ImageService3", "profile": level}
+
+    # The probe service is declared on the access-controlled resource — here the
+    # image annotation body — alongside its image service.
+    body_services = [service] if auth is None else [service, auth]
+
+    canvas_id = _canvas_uri(manifest_id_url, index)
+    canvas: dict = {"id": canvas_id, "type": "Canvas"}
+    if label is not None:
+        canvas["label"] = _language_map(label)
+    canvas["width"] = width
+    canvas["height"] = height
+    canvas["items"] = [
+        {
+            "id": urljoin([canvas_id, "page", "1"]),
+            "type": "AnnotationPage",
+            "items": [
+                {
+                    "id": urljoin([canvas_id, "annotation", "1"]),
+                    "type": "Annotation",
+                    "motivation": "painting",
+                    "target": canvas_id,
+                    "body": {
+                        "id": image_id,
+                        "type": "Image",
+                        "format": "image/jpeg",
+                        "width": width,
+                        "height": height,
+                        "service": body_services,
+                    },
+                }
+            ],
+        }
+    ]
+    return canvas
+
+
+def build_multi_manifest(
+    id_url: str,
+    images,
+    *,
+    label,
+    version: int | None = None,
+    level: str | None = None,
+    auth: dict | None = None,
+    **descriptors,
+) -> dict:
+    """Build a multi-canvas IIIF Presentation API 3.0 Manifest.
+
+    Presents several images as one manifest — recto/verso, a paged object, detail
+    shots — by repeating the single-canvas structure with per-canvas indexed
+    ``id`` URIs. The document is always Presentation 3.0; each embedded image
+    service reflects the Image API ``version``.
+
+    Args:
+        id_url: The manifest's image service base URI (``{host}/{identifier}``),
+            the stem for the synthetic manifest/canvas URIs.
+        images: A sequence of per-canvas specs — ``(service_id_url, width,
+            height)`` tuples, or dicts with ``id`` / ``width`` / ``height`` and an
+            optional ``label`` (see :func:`_normalize_image_spec`).
+        label: Manifest label (coerced via :func:`_language_map`).
+        version: Image API version of the embedded image services (``2`` or
+            ``3``); defaults to ``settings.IIIF_IMAGE_API_VERSION`` (``3``).
+        level: Advertised compliance level; defaults to
+            ``settings.IIIF_COMPLIANCE_LEVEL`` (``"level2"``).
+        auth: An optional resolved Authorization Flow 2.0 probe-service ``dict``
+            applied to **every** image body; only valid at version 3.
+        **descriptors: Optional descriptive properties (keys in
+            :data:`DESCRIPTOR_KEYS`) emitted at the manifest top level.
+
+    Returns:
+        The manifest as a dict, ready for ``JsonResponse``.
+
+    Raises:
+        ImproperlyConfigured: If ``version`` is unknown, ``auth`` is set while not
+            on version 3, or a descriptor key is unknown.
+    """
+    version = _api_version(version)
+    level = _compliance_level(level)
+    _require_auth_v3(auth, version)
+    _reject_unknown_descriptors(descriptors)
+
+    canvases = []
+    for index, image in enumerate(images, start=1):
+        service_id_url, width, height, canvas_label = _normalize_image_spec(image)
+        canvases.append(
+            _build_canvas(
+                id_url,
+                index,
+                service_id_url,
+                width,
+                height,
+                label=canvas_label,
+                version=version,
+                level=level,
+                auth=auth,
+            )
+        )
+
+    manifest = {
+        "@context": PRESENTATION_CONTEXT,
+        "id": _manifest_uri(id_url),
+        "type": "Manifest",
+        "label": _language_map(label),
+    }
+    manifest.update(_descriptive_properties(descriptors))
+    manifest["items"] = canvases
+    return manifest
+
+
 def build_manifest(
     id_url: str,
     width: int,
     height: int,
     *,
-    label: str,
+    label,
     version: int | None = None,
     level: str | None = None,
     auth: dict | None = None,
+    **descriptors,
 ) -> dict:
     """Build a minimal single-image IIIF Presentation API 3.0 Manifest.
 
-    The manifest wraps one image on one canvas so it opens directly in viewers
-    like Mirador or OpenSeadragon. The document itself is always Presentation
-    3.0; the embedded image service reflects the Image API ``version`` so a 2.x
-    deployment advertises ``ImageService2`` and a matching full-size image URL.
-
-    Synthetic ``id`` URIs for the manifest, canvas, annotation page, and
-    annotation are derived from ``id_url`` (e.g. ``{id_url}/manifest``); they
-    only need to be stable and unique, which these are.
+    A thin wrapper over :func:`build_multi_manifest` for the common one-image
+    case: the manifest wraps one image on one canvas so it opens directly in
+    viewers like Mirador or OpenSeadragon. With no ``descriptors`` its output is
+    identical to the historical single-image manifest.
 
     Args:
         id_url: The image service base URI (``{host}/{identifier}``), reused as
             the image service ``id`` and as the stem for the synthetic URIs.
         width: Image width in pixels.
         height: Image height in pixels.
-        label: Human-readable label for the manifest/canvas.
+        label: Human-readable label for the manifest (coerced via
+            :func:`_language_map`).
         version: Image API version of the embedded image service (``2`` or
             ``3``); defaults to ``settings.IIIF_IMAGE_API_VERSION`` (``3``).
         level: Advertised compliance level; defaults to
             ``settings.IIIF_COMPLIANCE_LEVEL`` (``"level2"``).
         auth: An optional resolved Authorization Flow 2.0 probe-service ``dict``
             (see :func:`resolve_auth`). When present it is added to the
-            access-controlled image body's ``service`` array (alongside the image
-            service); only valid at version 3.
+            access-controlled image body's ``service`` array; only valid at
+            version 3.
+        **descriptors: Optional descriptive properties (keys in
+            :data:`DESCRIPTOR_KEYS`) emitted at the manifest top level.
 
     Returns:
         The manifest as a dict, ready for ``JsonResponse``.
 
     Raises:
-        ImproperlyConfigured: If ``version`` is unknown, or ``auth`` is set while
-            not on version 3.
+        ImproperlyConfigured: If ``version`` is unknown, ``auth`` is set while not
+            on version 3, or a descriptor key is unknown.
     """
-    version = _api_version(version)
-    level = _compliance_level(level)
-    _require_auth_v3(auth, version)
+    return build_multi_manifest(
+        id_url,
+        [(id_url, width, height)],
+        label=label,
+        version=version,
+        level=level,
+        auth=auth,
+        **descriptors,
+    )
 
-    # v3 uses the "max" size keyword; v2 uses "full" for a full-resolution image.
-    full_size = "max" if version == 3 else "full"
-    image_id = urljoin([id_url, "full", full_size, "0", "default.jpg"])
 
-    if version == 2:
-        service = {
-            "@id": id_url,
-            "@type": "ImageService2",
-            "profile": f"http://iiif.io/api/image/2/{level}.json",
-        }
-    else:
-        service = {"id": id_url, "type": "ImageService3", "profile": level}
+def build_collection(id_url: str, items, *, label, **descriptors) -> dict:
+    """Build a IIIF Presentation API 3.0 Collection of manifest references.
 
-    # The probe service is declared on the access-controlled resource — here the
-    # image annotation body — alongside its image service.
-    body_services = [service] if auth is None else [service, auth]
+    A Collection groups manifests for browsing — the natural rendering of a
+    Django queryset ("all photos in this album"). It embeds only *references* to
+    each manifest (id/type/label/thumbnail), never the manifests themselves, so
+    even a large collection stays a small response.
 
-    canvas_id = _canvas_uri(id_url)
-    return {
+    Args:
+        id_url: The Collection's own ``id`` URI.
+        items: A sequence of member entries — ``(manifest_url, label)`` or
+            ``(manifest_url, label, thumbnail)`` tuples, or already-formed member
+            dicts (passed through). ``label`` is coerced via
+            :func:`_language_map`; ``thumbnail`` via :func:`_thumbnail`.
+        label: Collection label (coerced via :func:`_language_map`).
+        **descriptors: Optional descriptive properties (keys in
+            :data:`DESCRIPTOR_KEYS`) emitted at the collection top level.
+
+    Returns:
+        The Collection as a dict, ready for ``JsonResponse``.
+
+    Raises:
+        ImproperlyConfigured: If a descriptor key is unknown.
+    """
+    _reject_unknown_descriptors(descriptors)
+    collection = {
         "@context": PRESENTATION_CONTEXT,
-        "id": _manifest_uri(id_url),
-        "type": "Manifest",
-        "label": {"none": [label]},
-        "items": [
-            {
-                "id": canvas_id,
-                "type": "Canvas",
-                "width": width,
-                "height": height,
-                "items": [
-                    {
-                        "id": urljoin([canvas_id, "page", "1"]),
-                        "type": "AnnotationPage",
-                        "items": [
-                            {
-                                "id": urljoin([canvas_id, "annotation", "1"]),
-                                "type": "Annotation",
-                                "motivation": "painting",
-                                "target": canvas_id,
-                                "body": {
-                                    "id": image_id,
-                                    "type": "Image",
-                                    "format": "image/jpeg",
-                                    "width": width,
-                                    "height": height,
-                                    "service": body_services,
-                                },
-                            }
-                        ],
-                    }
-                ],
-            }
-        ],
+        "id": id_url,
+        "type": "Collection",
+        "label": _language_map(label),
     }
+    collection.update(_descriptive_properties(descriptors))
+    collection["items"] = [_collection_item(item) for item in items]
+    return collection
+
+
+def _collection_item(item) -> dict:
+    """Build one Collection member reference.
+
+    Args:
+        item: A ``(manifest_url, label)`` or ``(manifest_url, label, thumbnail)``
+            tuple, or an already-formed member dict (passed through).
+
+    Returns:
+        A ``{"id", "type": "Manifest", "label"[, "thumbnail"]}`` reference dict.
+    """
+    if isinstance(item, dict):
+        return item
+    manifest_url, label, *rest = item
+    entry = {"id": manifest_url, "type": "Manifest", "label": _language_map(label)}
+    if rest:
+        entry["thumbnail"] = _thumbnail(rest[0])
+    return entry
 
 
 def encode_content_state(state: dict | str) -> str:
@@ -812,7 +1147,10 @@ class IIIFObject(object):
         :attr:`info_document`, accessing this reads the image dimensions from
         storage. When ``settings.IIIF_AUTH`` resolves to a probe service for this
         image, its Authorization Flow 2.0 ``service`` block is attached to the
-        image body.
+        image body. When ``settings.IIIF_MANIFEST_DESCRIPTORS`` resolves to a
+        descriptor bag for this image (see :func:`resolve_manifest_descriptors`),
+        its descriptive properties (``metadata``, ``rights``, …) are emitted at
+        the manifest top level.
 
         Returns:
             The manifest document, or ``None`` for an empty/unset field.
@@ -826,6 +1164,7 @@ class IIIFObject(object):
             self._parent.height,
             label=label,
             auth=resolve_auth(self._parent),
+            **resolve_manifest_descriptors(self._parent),
         )
 
     def content_state(

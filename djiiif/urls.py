@@ -10,15 +10,20 @@ An image stored as ``uploads/photo.jpg`` is then served at
 ``/iiif/uploads%2Fphoto.jpg/manifest``. Serving identifiers that contain encoded
 slashes requires the web server to allow encoded slashes in the path (e.g.
 Apache's ``AllowEncodedSlashes``); flat identifiers need no such config.
+
+A Collection of manifest references is served at ``/iiif/collection`` when
+``settings.IIIF_COLLECTION_SOURCE`` is configured (otherwise ``404``).
 """
 
-from django.urls import re_path
+from django.urls import path, re_path
 
-from djiiif.views import serve_info_json, serve_manifest
+from djiiif.views import serve_collection, serve_info_json, serve_manifest
 
 app_name = "djiiif"
 
 urlpatterns = [
+    # Fixed route first, so the greedy identifier patterns below cannot shadow it.
+    path("collection", serve_collection, name="collection"),
     re_path(r"^(?P<identifier>.+)/info\.json$", serve_info_json, name="info-json"),
     re_path(r"^(?P<identifier>.+)/manifest$", serve_manifest, name="manifest"),
 ]
