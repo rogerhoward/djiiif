@@ -14,6 +14,11 @@ dates are the commit dates of the corresponding version bump.
 ## [Unreleased]
 
 ### Added
+- **Comprehensive documentation on Read the Docs.** A multi-page Sphinx site
+  (MyST Markdown + Furo theme) under `docs/`, with getting-started guides, a
+  feature guide per API, a full settings reference, and an autodoc API reference
+  generated from the package's docstrings. Configured for Read the Docs via
+  `.readthedocs.yaml`; build the toolchain with `pip install -e ".[docs]"`.
 - **Web Annotations & Content Search 2.0 (transcriptions, OCR, search-within).**
   A shared frozen `Annotation` dataclass (or plain dict; `resolve_annotation`
   normalizes both) is the one hit/annotation type for two paired, opt-in,

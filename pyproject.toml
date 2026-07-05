@@ -30,6 +30,15 @@ classifiers = [
 [project.optional-dependencies]
 # Optional Django REST Framework support (djiiif.serializers).
 drf = ["djangorestframework"]
+# Everything needed to build the documentation (Read the Docs uses this extra).
+# djangorestframework is included so autodoc can import djiiif.serializers.
+docs = [
+    "sphinx",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+    "djangorestframework",
+]
 # Everything needed to test, build, and document the package locally / in CI.
 dev = [
     "pytest",
@@ -38,7 +47,7 @@ dev = [
     "djangorestframework",
     "build",
     "twine",
-    "sphinx",
+    "djiiif[docs]",
 ]
 
 [project.urls]
