@@ -1,7 +1,7 @@
 # WEB-ANNOTATIONS — serving W3C Web Annotations (transcriptions, OCR, commentary)
 
-**Status:** Proposed — all questions resolved, ready to implement (first of the annotation pair)
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `annotations-search` (co-landed with CONTENT-SEARCH)
+**Branch:** `annotations-search`
 **Date:** 2026-07-03
 
 ## Problem

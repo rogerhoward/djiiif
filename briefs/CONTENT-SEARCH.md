@@ -1,7 +1,7 @@
 # CONTENT-SEARCH — IIIF Content Search API 2.0 (search within a resource)
 
-**Status:** Proposed — all questions resolved, ready to implement (after WEB-ANNOTATIONS)
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `annotations-search` (co-landed with WEB-ANNOTATIONS)
+**Branch:** `annotations-search`
 **Date:** 2026-07-03
 
 ## Problem

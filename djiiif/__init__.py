@@ -23,6 +23,13 @@ to a region — in a manifest-aware viewer, and IIIF Change Discovery API 1.0
 builders (:class:`Activity` / :func:`resolve_activity` / :func:`build_activity` /
 :func:`build_ordered_collection` / :func:`build_collection_page`) that back the
 opt-in activity-stream views in :mod:`djiiif.views`.
+
+W3C Web Annotation and IIIF Content Search 2.0 builders (:class:`Annotation` /
+:func:`resolve_annotation` / :func:`build_annotation` /
+:func:`build_annotation_page` / :func:`build_search_service` /
+:func:`build_search_response`) back the opt-in annotation-serving and
+search views in :mod:`djiiif.views`, which draw their content from the
+project-owned ``IIIF_ANNOTATIONS_BACKEND`` / ``IIIF_SEARCH_BACKEND`` callables.
 """
 
 import base64
@@ -1204,6 +1211,253 @@ def build_collection_page(
         page["startIndex"] = start_index
     page["orderedItems"] = activities
     return page
+
+
+# @context for a served AnnotationPage: the W3C Web Annotation context plus the
+# IIIF Presentation 3 context (the pairing viewers expect for non-painting
+# annotations referenced from a manifest's Canvas ``annotations``).
+ANNOTATION_CONTEXT = [
+    "http://www.w3.org/ns/anno.jsonld",
+    "http://iiif.io/api/presentation/3/context.json",
+]
+
+# @context for a Content Search 2.0 response (a search-flavored AnnotationPage).
+SEARCH_CONTEXT = "http://iiif.io/api/search/2/context.json"
+
+# Every field of the shared Annotation shape, with its default. resolve_annotation
+# fills these for a plain-dict entry so the builders can read a uniform dict.
+_ANNOTATION_DEFAULTS: dict = {
+    "text": None,
+    "motivation": "supplementing",
+    "xywh": None,
+    "language": None,
+    "format": "text/plain",
+    "id": None,
+    "canvas_id": None,
+    "exact": None,
+    "before": None,
+    "after": None,
+}
+
+
+@dataclass(frozen=True)
+class Annotation:
+    """A W3C Web Annotation over a canvas — the shared annotation/search hit type.
+
+    One typed, opt-in shape for both the annotation-serving backend
+    (``IIIF_ANNOTATIONS_BACKEND``) and the search backend
+    (``IIIF_SEARCH_BACKEND``): a search hit *is* an annotation plus snippet
+    context. A plain ``dict`` with the same keys works too, normalized by
+    :func:`resolve_annotation` (the ``Profile``/``ProbeService`` dual-shape
+    precedent).
+
+    Attributes:
+        text: The body value — a string wrapped as a ``TextualBody``, or a
+            preformed ``body`` ``dict`` for a non-textual body.
+        motivation: The annotation motivation; ``"supplementing"`` (default,
+            the transcription/OCR case), ``"commenting"``, ``"tagging"``, …
+        xywh: Optional ``x,y,w,h`` region on the target canvas.
+        language: Optional ``TextualBody`` language.
+        format: ``TextualBody`` format (default ``"text/plain"``).
+        id: Optional stable annotation id; synthesized when absent.
+        canvas_id: The target canvas URI — required for a search hit (which
+            locates itself on a canvas); unused when serving an annotation page
+            (the canvas is implied by the page URL).
+        exact: The matched substring for a search snippet (defaults to the query
+            ``q`` when absent).
+        before: Text preceding the match (the snippet ``prefix``).
+        after: Text following the match (the snippet ``suffix``).
+    """
+
+    text: str | dict | None = None
+    motivation: str = "supplementing"
+    xywh: str | None = None
+    language: str | None = None
+    format: str = "text/plain"
+    id: str | None = None
+    canvas_id: str | None = None
+    exact: str | None = None
+    before: str | None = None
+    after: str | None = None
+
+
+def resolve_annotation(entry) -> dict:
+    """Normalize an annotation/search-hit entry to a plain dict.
+
+    Mirrors :func:`resolve_profile`: an entry may be an :class:`Annotation` or a
+    plain ``dict`` (any subset of the annotation keys; missing keys take their
+    defaults). Both normalize to a dict carrying every key in
+    :data:`_ANNOTATION_DEFAULTS`.
+
+    Args:
+        entry: An :class:`Annotation` or a ``dict``.
+
+    Returns:
+        A dict with every annotation key populated.
+
+    Raises:
+        ImproperlyConfigured: If ``entry`` is neither an ``Annotation`` nor a
+            ``dict``.
+    """
+    if isinstance(entry, Annotation):
+        return {key: getattr(entry, key) for key in _ANNOTATION_DEFAULTS}
+    if isinstance(entry, dict):
+        return {**_ANNOTATION_DEFAULTS, **entry}
+    raise ImproperlyConfigured(
+        "Each annotation/search entry must be an Annotation or dict, got "
+        f"{type(entry).__name__}."
+    )
+
+
+def _annotation_body(ann: dict) -> dict:
+    """Build an annotation ``body`` from a resolved annotation dict.
+
+    Args:
+        ann: A resolved annotation dict (see :func:`resolve_annotation`).
+
+    Returns:
+        The ``text`` verbatim if it is already a preformed ``body`` dict;
+        otherwise a ``TextualBody`` wrapping the string value (with ``language``
+        when set).
+    """
+    text = ann["text"]
+    if isinstance(text, dict):
+        return text
+    body = {"type": "TextualBody", "value": text, "format": ann["format"]}
+    if ann["language"] is not None:
+        body["language"] = ann["language"]
+    return body
+
+
+def build_annotation(page_url: str, index: int, canvas_id: str | None, item) -> dict:
+    """Build one W3C Annotation targeting a canvas.
+
+    Args:
+        page_url: The owning AnnotationPage / search URL, the stem for a
+            synthesized id.
+        index: The 1-based item index (used for the synthesized id).
+        canvas_id: The target canvas URI; when ``None`` the annotation's own
+            ``canvas_id`` is used (the search-hit case).
+        item: An :class:`Annotation` or annotation ``dict``.
+
+    Returns:
+        The Annotation dict — ``{id, type, motivation, body, target}`` — where
+        ``target`` is the canvas URI, plus an ``#xywh=`` fragment when the item
+        carries a region.
+    """
+    ann = resolve_annotation(item)
+    anno_id = ann["id"] or urljoin([page_url, "anno", str(index)])
+    target_canvas = canvas_id if canvas_id is not None else ann["canvas_id"]
+    target = target_canvas if not ann["xywh"] else f"{target_canvas}#xywh={ann['xywh']}"
+    return {
+        "id": anno_id,
+        "type": "Annotation",
+        "motivation": ann["motivation"],
+        "body": _annotation_body(ann),
+        "target": target,
+    }
+
+
+def build_annotation_page(page_url: str, canvas_id: str, items) -> dict:
+    """Build a W3C ``AnnotationPage`` of annotations over one canvas.
+
+    Args:
+        page_url: This page's own URL (also the ``id``).
+        canvas_id: The canvas every annotation targets.
+        items: An iterable of :class:`Annotation` or annotation ``dict`` entries.
+
+    Returns:
+        The ``AnnotationPage`` dict, ready for ``JsonResponse``. An empty
+        ``items`` yields a spec-valid empty page.
+    """
+    return {
+        "@context": ANNOTATION_CONTEXT,
+        "id": page_url,
+        "type": "AnnotationPage",
+        "items": [
+            build_annotation(page_url, i, canvas_id, item)
+            for i, item in enumerate(items, start=1)
+        ],
+    }
+
+
+def build_search_service(search_url: str) -> dict:
+    """Build the ``SearchService2`` advertisement block.
+
+    Args:
+        search_url: The Content Search 2.0 endpoint URL.
+
+    Returns:
+        The ``{"id", "type": "SearchService2"}`` service dict.
+    """
+    return {"id": search_url, "type": "SearchService2"}
+
+
+def build_search_response(
+    search_url: str, q: str, hits, *, ignored=()
+) -> dict:
+    """Build a Content Search 2.0 response (a search-flavored ``AnnotationPage``).
+
+    Emits the matching annotations fully embedded in ``items`` and a match block
+    in ``annotations`` — an ``AnnotationPage`` of ``contextualizing`` annotations,
+    each targeting a ``SpecificResource`` (the matched annotation) via a
+    ``TextQuoteSelector`` (``prefix``/``exact``/``suffix``). ``exact`` defaults to
+    the query ``q``.
+
+    Args:
+        search_url: The search endpoint URL (the response ``id`` appends
+            ``?q=``).
+        q: The query string.
+        hits: An iterable of :class:`Annotation` or hit ``dict`` entries; each
+            supplies its own ``canvas_id``.
+        ignored: Request parameter names the server did not act on, echoed in the
+            ``ignored`` list.
+
+    Returns:
+        The search ``AnnotationPage`` dict, ready for ``JsonResponse``.
+    """
+    items = []
+    match_items = []
+    for index, hit in enumerate(hits, start=1):
+        item = build_annotation(search_url, index, None, hit)
+        items.append(item)
+
+        ann = resolve_annotation(hit)
+        match_items.append(
+            {
+                "id": urljoin([search_url, "match", str(index)]),
+                "type": "Annotation",
+                "motivation": "contextualizing",
+                "target": {
+                    "type": "SpecificResource",
+                    "source": item["id"],
+                    "selector": {
+                        "type": "TextQuoteSelector",
+                        "prefix": ann["before"] or "",
+                        "exact": ann["exact"] if ann["exact"] is not None else q,
+                        "suffix": ann["after"] or "",
+                    },
+                },
+            }
+        )
+
+    response = {
+        "@context": SEARCH_CONTEXT,
+        "id": f"{search_url}?q={q}",
+        "type": "AnnotationPage",
+    }
+    if ignored:
+        response["ignored"] = list(ignored)
+    response["items"] = items
+    if match_items:
+        response["annotations"] = [
+            {
+                "id": urljoin([search_url, "annotations"]),
+                "type": "AnnotationPage",
+                "items": match_items,
+            }
+        ]
+    return response
 
 
 class IIIFObject(object):

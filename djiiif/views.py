@@ -11,7 +11,10 @@ documents.
 Two settings-driven views need no stored image: :func:`serve_collection` renders
 a browsable Collection of manifest references, and :func:`serve_activity_collection`
 / :func:`serve_activity_page` render a paged IIIF Change Discovery activity stream
-so aggregators can harvest what changed.
+so aggregators can harvest what changed. :func:`serve_annotation_page` serves a
+W3C AnnotationPage (transcriptions/OCR/commentary) and :func:`serve_search`
+answers IIIF Content Search 2.0 queries; both draw from project-owned backend
+callables, and :func:`serve_manifest` advertises them when configured.
 """
 
 from urllib.parse import unquote
@@ -26,12 +29,17 @@ from django.utils.module_loading import import_string
 
 from djiiif import (
     build_activity,
+    build_annotation_page,
     build_collection,
     build_collection_page,
     build_info_document,
     build_manifest,
     build_ordered_collection,
+    build_search_response,
+    build_search_service,
     resolve_activity,
+    resolve_annotation,
+    urljoin,
 )
 
 
@@ -112,6 +120,12 @@ def serve_manifest(request, identifier):
     suffix, matching the identifier the ``info.json`` view serves. The manifest
     label defaults to the file's base name.
 
+    When ``IIIF_ANNOTATIONS_BACKEND`` is configured, the canvas gains an
+    ``annotations`` reference to this image's AnnotationPage; when a search
+    backend is available (a dedicated ``IIIF_SEARCH_BACKEND`` or the annotations
+    fallback), the manifest advertises a ``SearchService2``. Both are view-only —
+    ``IIIFObject.manifest`` (no request in scope) emits neither.
+
     Args:
         request: The incoming ``HttpRequest``.
         identifier: The encoded identifier segment captured by the URLconf.
@@ -125,7 +139,16 @@ def serve_manifest(request, identifier):
     name, width, height = _load_dimensions(identifier)
     id_url = request.build_absolute_uri(request.path).rsplit("/manifest", 1)[0]
     label = name.rsplit("/", 1)[-1]
-    return _ld_json(build_manifest(id_url, width, height, label=label))
+    manifest = build_manifest(id_url, width, height, label=label)
+
+    if _resolve_backend("IIIF_ANNOTATIONS_BACKEND") is not None:
+        manifest["items"][0]["annotations"] = [
+            {"id": urljoin([id_url, "annotations", "1"]), "type": "AnnotationPage"}
+        ]
+    if _search_available():
+        manifest["service"] = [build_search_service(urljoin([id_url, "search"]))]
+
+    return _ld_json(manifest)
 
 
 def serve_collection(request):
@@ -281,3 +304,142 @@ def serve_activity_page(request, page):
             start_index=paginator.per_page * (page - 1),
         )
     )
+
+
+def _resolve_backend(setting_name: str):
+    """Resolve a backend setting to a callable, or ``None`` when unset.
+
+    Args:
+        setting_name: The setting to read (``IIIF_ANNOTATIONS_BACKEND`` /
+            ``IIIF_SEARCH_BACKEND``).
+
+    Returns:
+        The backend callable (importing a dotted-path string), or ``None`` if the
+        setting is unset.
+    """
+    backend = getattr(settings, setting_name, None)
+    if backend is None:
+        return None
+    if isinstance(backend, str):
+        backend = import_string(backend)
+    return backend
+
+
+def _search_available() -> bool:
+    """Return whether search can be answered (a dedicated backend or the fallback)."""
+    return (
+        _resolve_backend("IIIF_SEARCH_BACKEND") is not None
+        or _resolve_backend("IIIF_ANNOTATIONS_BACKEND") is not None
+    )
+
+
+def _canvas_id_for(request, suffix: str) -> tuple[str, str]:
+    """Return ``(id_url, canvas_id)`` for an annotation/search request.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        suffix: The trailing route segment to strip (``"/annotations/1"`` or
+            ``"/search"``) to recover the image service base URI.
+
+    Returns:
+        The image service base URI and the ``{id_url}/canvas/1`` URI that a
+        served manifest targets.
+    """
+    id_url = request.build_absolute_uri(request.path).rsplit(suffix, 1)[0]
+    return id_url, urljoin([id_url, "canvas", "1"])
+
+
+def serve_annotation_page(request, identifier):
+    """Serve a W3C ``AnnotationPage`` for a stored image.
+
+    Draws its annotations from the ``IIIF_ANNOTATIONS_BACKEND`` callable
+    ``(identifier, request) -> iterable`` of :class:`~djiiif.Annotation` /
+    ``dict`` entries. The annotations target ``{id_url}/canvas/1``, matching the
+    canvas :func:`serve_manifest` emits. Reads no image storage.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        identifier: The encoded identifier segment captured by the URLconf.
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the ``AnnotationPage``.
+
+    Raises:
+        Http404: If ``IIIF_ANNOTATIONS_BACKEND`` is unset.
+    """
+    backend = _resolve_backend("IIIF_ANNOTATIONS_BACKEND")
+    if backend is None:
+        raise Http404("No IIIF annotations backend is configured.")
+    _id_url, canvas_id = _canvas_id_for(request, "/annotations/1")
+    page_url = request.build_absolute_uri(request.path)
+    items = list(backend(identifier, request))
+    return _ld_json(build_annotation_page(page_url, canvas_id, items))
+
+
+def serve_search(request, identifier):
+    """Answer a IIIF Content Search 2.0 query for a stored image.
+
+    Uses ``IIIF_SEARCH_BACKEND`` ``(identifier, q, request) -> iterable`` of hits
+    when configured; otherwise falls back to a case-insensitive substring match
+    over ``IIIF_ANNOTATIONS_BACKEND`` (so serving annotations yields search for
+    free). A missing or empty ``q`` returns a valid empty page — never the whole
+    corpus. Unimplemented spec parameters (``motivation``/``date``/``user``) are
+    echoed in ``ignored``. Reads no image storage.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        identifier: The encoded identifier segment captured by the URLconf.
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the search ``AnnotationPage``.
+
+    Raises:
+        Http404: If neither a search nor an annotations backend is configured.
+    """
+    search_backend = _resolve_backend("IIIF_SEARCH_BACKEND")
+    annotations_backend = _resolve_backend("IIIF_ANNOTATIONS_BACKEND")
+    if search_backend is None and annotations_backend is None:
+        raise Http404("No IIIF search backend is configured.")
+
+    search_url = request.build_absolute_uri(request.path)
+    q = request.GET.get("q", "")
+    ignored = [p for p in ("motivation", "date", "user") if p in request.GET]
+
+    if not q:
+        hits = []
+    elif search_backend is not None:
+        hits = list(search_backend(identifier, q, request))
+    else:
+        _id_url, canvas_id = _canvas_id_for(request, "/search")
+        hits = _substring_hits(annotations_backend, identifier, q, request, canvas_id)
+
+    return _ld_json(build_search_response(search_url, q, hits, ignored=ignored))
+
+
+def _substring_hits(backend, identifier, q, request, canvas_id: str) -> list[dict]:
+    """Filter an annotations backend to a case-insensitive substring match on ``q``.
+
+    The free-search fallback: annotations from ``IIIF_ANNOTATIONS_BACKEND`` carry
+    no ``canvas_id`` (their canvas is implied by the page URL), so each match is
+    given the served manifest's ``canvas_id`` to locate the hit.
+
+    Args:
+        backend: The resolved annotations backend callable.
+        identifier: The encoded identifier passed to the backend.
+        q: The query string (matched case-insensitively as a substring).
+        request: The incoming ``HttpRequest`` passed to the backend.
+        canvas_id: The canvas URI to attach to matching hits.
+
+    Returns:
+        The matching hits as resolved annotation dicts.
+    """
+    needle = q.lower()
+    hits = []
+    for entry in backend(identifier, request):
+        ann = resolve_annotation(entry)
+        text = ann["text"]
+        if isinstance(text, str) and needle in text.lower():
+            if ann["canvas_id"] is None:
+                ann["canvas_id"] = canvas_id
+            hits.append(ann)
+    return hits
