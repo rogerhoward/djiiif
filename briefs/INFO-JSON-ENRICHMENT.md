@@ -9,7 +9,7 @@
 `build_info_document` emits the minimal spec-valid `info.json`: context, id,
 protocol, profile, width, height. That is enough for a viewer to *start*, but
 the Image API defines optional properties that materially improve client
-behavior, and real deployments (djiiif fronting Cantaloupe, iiiris, or a
+behavior, and real deployments (djiiif fronting iiiris or a
 static tile pyramid) often need to advertise them:
 
 - **`sizes`** — preferred complete-image sizes; viewers use these for

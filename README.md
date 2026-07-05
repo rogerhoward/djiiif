@@ -2,9 +2,11 @@
 
 djiiif is a package designed to make integrating the [IIIF Image API](https://iiif.io/api/image/3.0/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
 
+📖 **Full documentation:** [djiiif.readthedocs.io](https://djiiif.readthedocs.io/) — guides for every feature, a settings reference, and the API reference. This README is the quickstart; the docs are the comprehensive reference.
+
 ## Why djiiif and not ImageKit
 
-I love ImageKit, but I recently worked on a project where we already had IIIF handling image derivative generation and serving, and Django ImageKit just got in the way. I wanted to still register my source images with Django, but serve them through an [IIIF server](https://github.com/loris-imageserver/loris), and this is what I came up with. I have lots of ideas for improvements here, but the initial release is just a santized version of what I used on my most recent project.
+I love ImageKit, but I recently worked on a project where we already had IIIF handling image derivative generation and serving, and Django ImageKit just got in the way. I wanted to still register my source images with Django, but serve them through an [IIIF server](https://gitlab.com/iiiris-org/iiiris), and this is what I came up with. I have lots of ideas for improvements here, but the initial release is just a santized version of what I used on my most recent project.
 
 ## Installation
 
@@ -396,7 +398,7 @@ With `djiiif` in `INSTALLED_APPS`, `manage.py check` validates `IIIF_PROFILES` a
 
 ### IIIF authorization (Auth Flow 2.0)
 
-For access-controlled images served by an image server that implements the [IIIF Authorization Flow API 2.0](https://iiif.io/api/auth/2.0/) (e.g. [iiiris](https://iiif.io/api/auth/2.0/)), djiiif can embed the auth **service description** in the `info_document` and `manifest` it generates, so a viewer (Mirador / OpenSeadragon) knows how to authenticate. djiiif only *describes* the services — the image server implements and enforces them.
+For access-controlled images served by an image server that implements the [IIIF Authorization Flow API 2.0](https://iiif.io/api/auth/2.0/) (e.g. [iiiris](https://gitlab.com/iiiris-org/iiiris)), djiiif can embed the auth **service description** in the `info_document` and `manifest` it generates, so a viewer (Mirador / OpenSeadragon) knows how to authenticate. djiiif only *describes* the services — the image server implements and enforces them.
 
 Configure `IIIF_AUTH` with a `ProbeService` (or a raw `dict`), using the typed helpers to build the nested probe → access → token/logout block:
 
