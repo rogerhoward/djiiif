@@ -14,6 +14,27 @@ dates are the commit dates of the corresponding version bump.
 ## [Unreleased]
 
 ### Added
+- **Web Annotations & Content Search 2.0 (transcriptions, OCR, search-within).**
+  A shared frozen `Annotation` dataclass (or plain dict; `resolve_annotation`
+  normalizes both) is the one hit/annotation type for two paired, opt-in,
+  model-free features:
+  - `IIIF_ANNOTATIONS_BACKEND` — a callable `(identifier, request) -> iterable`
+    of annotations — powers `serve_annotation_page` at
+    `/iiif/<identifier>/annotations/1` (a W3C `AnnotationPage` of
+    transcriptions/OCR/commentary targeting the image's canvas), and
+    `serve_manifest` gains the canvas `annotations` reference when it is set.
+  - `IIIF_SEARCH_BACKEND` — a callable `(identifier, q, request) -> iterable` of
+    hits — powers `serve_search` at `/iiif/<identifier>/search?q=` (a Content
+    Search 2.0 `AnnotationPage` with embedded hits and a `contextualizing`
+    match block), and `serve_manifest` advertises a `SearchService2`. When only
+    the annotations backend is set, `serve_search` falls back to a
+    case-insensitive substring filter over it — "serve annotations, get search
+    for free." Empty/missing `q` ⇒ empty page; unset backends ⇒ 404.
+
+  New public builders: `build_annotation`, `build_annotation_page`,
+  `build_search_service`, `build_search_response`. Advertisement is view-only
+  (`IIIFObject.manifest` is unchanged). See `briefs/WEB-ANNOTATIONS.md` and
+  `briefs/CONTENT-SEARCH.md`.
 - **IIIF Change Discovery API 1.0 activity stream (harvestable collections).** A
   new opt-in `IIIF_ACTIVITY_SOURCE` setting — a callable (or dotted-path string)
   returning an iterable of activity entries (plain dicts or the new frozen
