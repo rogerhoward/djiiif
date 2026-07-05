@@ -266,6 +266,34 @@ collection = build_collection(album.iiif_url, items, label=album.title)
 
 Each item is `(manifest_url, label)` (optionally a third `thumbnail`). To serve one directly, set `IIIF_COLLECTION_SOURCE` to a callable returning such items — it is exposed at `/iiif/collection` by `djiiif.urls` (unset ⇒ 404; `IIIF_COLLECTION_LABEL` sets the label). The response references manifests by URL only, so it stays small even for thousands of items.
 
+### Make your collection harvestable (Change Discovery)
+
+To let aggregators, portals, and search indexes discover *what changed since they last looked*, djiiif can serve a [IIIF Change Discovery API 1.0](https://iiif.io/api/discovery/1.0/) activity stream — the IIIF equivalent of a sitemap + RSS for your manifests. It's a natural fit for Django: the stream is just a queryset ordered by a modified timestamp, paginated.
+
+Point `IIIF_ACTIVITY_SOURCE` at a callable (or a dotted-path string) that yields one entry per resource, **in ascending `end_time` order**:
+
+```python
+# settings.py
+IIIF_ACTIVITY_SOURCE = "myapp.iiif.activities"
+
+# myapp/iiif.py
+def activities():
+    for photo in Photo.objects.exclude(image="").order_by("modified"):
+        yield {
+            "object_id": f"https://example.org/iiif/{photo.slug}/manifest",
+            "end_time": photo.modified,          # an aware datetime
+        }
+```
+
+Each entry is a plain dict (or an `Activity` dataclass) with `object_id` and `end_time`, plus optional `type` (`"Update"` default, or `"Create"`) and `object_type` (`"Manifest"` default, or `"Collection"`). With `djiiif.urls` mounted, the stream is served at:
+
+- `/iiif/activity/collection` — the `OrderedCollection` entry point (harvesters start here and follow `first`/`last`/`next`).
+- `/iiif/activity/page/<n>` — the `OrderedCollectionPage`s.
+
+Page size comes from `IIIF_ACTIVITY_PAGE_SIZE` (default 100). Returning a **queryset** (rather than a generator) lets pages slice lazily in the database — the recommended shape for large collections. Ordering is trusted, not re-sorted, so the source must yield ascending by `end_time`. Unset `IIIF_ACTIVITY_SOURCE` ⇒ the activity URLs 404.
+
+This is level-1 conformance (`Update`/`Create` with timestamps — enough for incremental harvest). `Delete` tracking (level 2) would require a persisted tombstone log and is future work.
+
 ### Serving info.json and manifests from Django
 
 djiiif can also serve the `info.json` and `manifest` documents itself — no separate image server is required for the metadata. Include its URLconf:

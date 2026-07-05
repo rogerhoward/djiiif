@@ -14,6 +14,20 @@ dates are the commit dates of the corresponding version bump.
 ## [Unreleased]
 
 ### Added
+- **IIIF Change Discovery API 1.0 activity stream (harvestable collections).** A
+  new opt-in `IIIF_ACTIVITY_SOURCE` setting — a callable (or dotted-path string)
+  returning an iterable of activity entries (plain dicts or the new frozen
+  `Activity` dataclass; `object_id` + `end_time`, optional `type`/`object_type`,
+  normalized by `resolve_activity`) — powers two drop-in views mounted by
+  `djiiif.urls`: `serve_activity_collection` at `/iiif/activity/collection` (the
+  `OrderedCollection` entry point) and `serve_activity_page` at
+  `/iiif/activity/page/<n>` (paged `OrderedCollectionPage`s in ascending
+  `endTime` order). Page size from `IIIF_ACTIVITY_PAGE_SIZE` (default 100);
+  pagination via `django.core.paginator` (querysets slice lazily, generators are
+  materialized). Level-1 conformance (`Create`/`Update`); `Delete`/level-2 is
+  future work. Module-level builders `build_activity` /
+  `build_ordered_collection` / `build_collection_page` are public. Unset
+  `IIIF_ACTIVITY_SOURCE` ⇒ the activity URLs 404. See `briefs/CHANGE-DISCOVERY.md`.
 - **Richer Presentation 3.0 manifests — descriptive properties.** `build_manifest`
   now accepts optional keyword descriptors `metadata`, `rights`,
   `required_statement`, `summary`, `thumbnail`, and `nav_date` (each emitted only

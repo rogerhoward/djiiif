@@ -7,6 +7,11 @@ provider of two documents built from a stored image: an Image API ``info.json``
 its dimensions, and returns the document built by the corresponding
 :mod:`djiiif` builder. Neither serves derivative pixels — only the JSON
 documents.
+
+Two settings-driven views need no stored image: :func:`serve_collection` renders
+a browsable Collection of manifest references, and :func:`serve_activity_collection`
+/ :func:`serve_activity_page` render a paged IIIF Change Discovery activity stream
+so aggregators can harvest what changed.
 """
 
 from urllib.parse import unquote
@@ -15,9 +20,19 @@ from django.conf import settings
 from django.core.exceptions import SuspiciousOperation
 from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
+from django.core.paginator import InvalidPage, Paginator
 from django.http import Http404, JsonResponse
+from django.utils.module_loading import import_string
 
-from djiiif import build_collection, build_info_document, build_manifest
+from djiiif import (
+    build_activity,
+    build_collection,
+    build_collection_page,
+    build_info_document,
+    build_manifest,
+    build_ordered_collection,
+    resolve_activity,
+)
 
 
 def _load_dimensions(identifier: str) -> tuple[str, int, int]:
@@ -142,3 +157,127 @@ def serve_collection(request):
     id_url = request.build_absolute_uri(request.path).rstrip("/")
     items = source() if callable(source) else source
     return _ld_json(build_collection(id_url, list(items), label=label))
+
+
+def _activity_paginator() -> Paginator:
+    """Resolve ``IIIF_ACTIVITY_SOURCE`` into a :class:`~django.core.paginator.Paginator`.
+
+    The setting may be a dotted-path string (imported here), a callable object, or
+    a direct iterable; a callable is invoked to obtain the iterable. A queryset or
+    list is paginated in place (querysets slice lazily in the DB); a bare
+    generator, which cannot be sliced, is materialized to a list first.
+
+    Returns:
+        A ``Paginator`` over the activity entries, page size from
+        ``IIIF_ACTIVITY_PAGE_SIZE`` (default 100).
+
+    Raises:
+        Http404: If ``IIIF_ACTIVITY_SOURCE`` is unset (the stream is opt-in).
+    """
+    source = getattr(settings, "IIIF_ACTIVITY_SOURCE", None)
+    if source is None:
+        raise Http404("No IIIF activity stream is configured.")
+    if isinstance(source, str):
+        source = import_string(source)
+    entries = source() if callable(source) else source
+    if not hasattr(entries, "__getitem__"):
+        entries = list(entries)
+    page_size = getattr(settings, "IIIF_ACTIVITY_PAGE_SIZE", 100)
+    return Paginator(entries, page_size)
+
+
+def _activity_base_url(request, suffix: str) -> str:
+    """Return the ``/iiif/activity`` base URL, stripping a route ``suffix``.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        suffix: The trailing route segment to remove (``"/collection"`` or
+            ``"/page/<n>"``).
+
+    Returns:
+        The absolute base URL shared by the collection and page routes.
+    """
+    return request.build_absolute_uri(request.path).rsplit(suffix, 1)[0]
+
+
+def serve_activity_collection(request):
+    """Serve the Change Discovery ``OrderedCollection`` entry point.
+
+    Driven by ``IIIF_ACTIVITY_SOURCE`` (see :func:`_activity_paginator`). The
+    collection's ``id`` is the request URL; ``first``/``last`` point at the page
+    routes. Reads no image storage.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the ``OrderedCollection``.
+
+    Raises:
+        Http404: If ``IIIF_ACTIVITY_SOURCE`` is unset.
+    """
+    paginator = _activity_paginator()
+    base = _activity_base_url(request, "/collection")
+    id_url = request.build_absolute_uri(request.path)
+    return _ld_json(
+        build_ordered_collection(
+            id_url,
+            paginator.count,
+            f"{base}/page/1",
+            f"{base}/page/{paginator.num_pages}",
+        )
+    )
+
+
+def serve_activity_page(request, page):
+    """Serve one Change Discovery ``OrderedCollectionPage``.
+
+    The page's activities are the source entries for this slice, resolved via
+    :func:`djiiif.resolve_activity` and built with :func:`djiiif.build_activity`,
+    kept in the source's ascending-``endTime`` order (the source owns that
+    contract; djiiif does not re-sort). ``prev``/``next`` are emitted at the
+    interior boundaries only.
+
+    Args:
+        request: The incoming ``HttpRequest``.
+        page: The 1-based page number (captured by the ``<int:page>`` route).
+
+    Returns:
+        A JSON-LD ``JsonResponse`` carrying the ``OrderedCollectionPage``.
+
+    Raises:
+        Http404: If ``IIIF_ACTIVITY_SOURCE`` is unset or ``page`` is out of range.
+    """
+    paginator = _activity_paginator()
+    try:
+        page_obj = paginator.page(page)
+    except InvalidPage as exc:
+        raise Http404("No such activity page.") from exc
+
+    base = _activity_base_url(request, f"/page/{page}")
+    page_url = request.build_absolute_uri(request.path)
+    prev_url = f"{base}/page/{page - 1}" if page_obj.has_previous() else None
+    next_url = f"{base}/page/{page + 1}" if page_obj.has_next() else None
+
+    activities = []
+    for entry in page_obj.object_list:
+        resolved = resolve_activity(entry)
+        activities.append(
+            build_activity(
+                resolved["object_id"],
+                resolved["end_time"],
+                activity_type=resolved["type"],
+                object_type=resolved["object_type"],
+            )
+        )
+
+    return _ld_json(
+        build_collection_page(
+            page_url,
+            f"{base}/collection",
+            activities,
+            prev_url=prev_url,
+            next_url=next_url,
+            start_index=paginator.per_page * (page - 1),
+        )
+    )

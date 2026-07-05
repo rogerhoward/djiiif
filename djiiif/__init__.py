@@ -19,7 +19,10 @@ The module also provides IIIF Content State API 1.0 helpers
 (:func:`encode_content_state` / :func:`decode_content_state` /
 :func:`build_content_state`, plus :meth:`IIIFObject.content_state`) for building
 the shareable ``iiif-content=`` deep links that open an image — optionally zoomed
-to a region — in a manifest-aware viewer.
+to a region — in a manifest-aware viewer, and IIIF Change Discovery API 1.0
+builders (:class:`Activity` / :func:`resolve_activity` / :func:`build_activity` /
+:func:`build_ordered_collection` / :func:`build_collection_page`) that back the
+opt-in activity-stream views in :mod:`djiiif.views`.
 """
 
 import base64
@@ -1036,6 +1039,171 @@ def build_content_state(
         "type": "Canvas",
         "partOf": [{"id": manifest_id, "type": "Manifest"}],
     }
+
+
+# @context for the IIIF Change Discovery API. The discovery context re-exports the
+# ActivityStreams 2.0 vocabulary; both are listed (the array form the brief
+# specifies) so an AS2-only consumer still resolves the activity terms.
+DISCOVERY_CONTEXT = [
+    "http://iiif.io/api/discovery/1/context.json",
+    "https://www.w3.org/ns/activitystreams",
+]
+
+
+@dataclass(frozen=True)
+class Activity:
+    """One IIIF Change Discovery activity over a IIIF resource.
+
+    The typed, opt-in shape for an ``IIIF_ACTIVITY_SOURCE`` entry — a structured
+    alternative to a plain ``dict`` with the same keys and defaults, normalized by
+    :func:`resolve_activity` (the ``Profile``/``ProbeService`` dual-shape
+    precedent).
+
+    Attributes:
+        object_id: The activity object's URL (a manifest or collection).
+        end_time: The modification timestamp — an aware ``datetime`` (serialized
+            ISO 8601) or a preformed ISO 8601 string.
+        type: The activity type — ``"Update"`` (default) or ``"Create"`` (both
+            level-1). ``"Delete"`` is level-2 and out of scope here.
+        object_type: The object's IIIF type — ``"Manifest"`` (default) or
+            ``"Collection"``.
+    """
+
+    object_id: str
+    end_time: datetime | str
+    type: str = "Update"
+    object_type: str = "Manifest"
+
+
+def resolve_activity(entry) -> dict:
+    """Normalize an ``IIIF_ACTIVITY_SOURCE`` entry to a plain dict.
+
+    Mirrors :func:`resolve_profile`: an entry may be an :class:`Activity` or a
+    plain ``dict`` (with ``object_id`` / ``end_time`` required and ``type`` /
+    ``object_type`` optional). Both normalize to a dict carrying every key with
+    defaults applied.
+
+    Args:
+        entry: An :class:`Activity` or a ``dict`` from the activity source.
+
+    Returns:
+        A dict with keys ``object_id``, ``end_time``, ``type``, ``object_type``.
+
+    Raises:
+        ImproperlyConfigured: If ``entry`` is neither an ``Activity`` nor a
+            ``dict``.
+    """
+    if isinstance(entry, Activity):
+        return {
+            "object_id": entry.object_id,
+            "end_time": entry.end_time,
+            "type": entry.type,
+            "object_type": entry.object_type,
+        }
+    if isinstance(entry, dict):
+        return {
+            "object_id": entry["object_id"],
+            "end_time": entry["end_time"],
+            "type": entry.get("type", "Update"),
+            "object_type": entry.get("object_type", "Manifest"),
+        }
+    raise ImproperlyConfigured(
+        f"Each IIIF_ACTIVITY_SOURCE entry must be an Activity or dict, got "
+        f"{type(entry).__name__}."
+    )
+
+
+def build_activity(
+    object_id: str,
+    end_time: datetime | str,
+    *,
+    activity_type: str = "Update",
+    object_type: str = "Manifest",
+) -> dict:
+    """Build one ActivityStreams activity for an ``orderedItems`` list.
+
+    Args:
+        object_id: The activity object's URL (a manifest or collection).
+        end_time: The modification timestamp — an aware ``datetime`` (serialized
+            via ``.isoformat()``) or a preformed ISO 8601 string.
+        activity_type: The activity type (``"Update"`` / ``"Create"``).
+        object_type: The object's IIIF type (``"Manifest"`` / ``"Collection"``).
+
+    Returns:
+        The activity dict — ``{"type", "object": {"id", "type"}, "endTime"}``.
+        No ``@context`` (activities are always embedded in a page).
+    """
+    end = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+    return {
+        "type": activity_type,
+        "object": {"id": object_id, "type": object_type},
+        "endTime": end,
+    }
+
+
+def build_ordered_collection(
+    id_url: str, total: int, first_url: str, last_url: str
+) -> dict:
+    """Build the Change Discovery ``OrderedCollection`` entry point.
+
+    Args:
+        id_url: The collection's own URL.
+        total: ``totalItems`` — the activity count across all pages.
+        first_url: URL of the first ``OrderedCollectionPage``.
+        last_url: URL of the last ``OrderedCollectionPage``.
+
+    Returns:
+        The ``OrderedCollection`` dict, ready for ``JsonResponse``.
+    """
+    return {
+        "@context": DISCOVERY_CONTEXT,
+        "id": id_url,
+        "type": "OrderedCollection",
+        "totalItems": total,
+        "first": {"id": first_url, "type": "OrderedCollectionPage"},
+        "last": {"id": last_url, "type": "OrderedCollectionPage"},
+    }
+
+
+def build_collection_page(
+    id_url: str,
+    collection_url: str,
+    activities: list[dict],
+    *,
+    prev_url: str | None = None,
+    next_url: str | None = None,
+    start_index: int | None = None,
+) -> dict:
+    """Build one Change Discovery ``OrderedCollectionPage``.
+
+    Args:
+        id_url: This page's own URL.
+        collection_url: URL of the owning ``OrderedCollection`` (emitted as
+            ``partOf``).
+        activities: The page's activities (see :func:`build_activity`), in
+            ascending ``endTime`` order.
+        prev_url: URL of the previous page; omitted on the first page.
+        next_url: URL of the next page; omitted on the last page.
+        start_index: 0-based index of this page's first item within the whole
+            stream; omitted when ``None``.
+
+    Returns:
+        The ``OrderedCollectionPage`` dict, ready for ``JsonResponse``.
+    """
+    page = {
+        "@context": DISCOVERY_CONTEXT,
+        "id": id_url,
+        "type": "OrderedCollectionPage",
+        "partOf": {"id": collection_url, "type": "OrderedCollection"},
+    }
+    if prev_url is not None:
+        page["prev"] = {"id": prev_url, "type": "OrderedCollectionPage"}
+    if next_url is not None:
+        page["next"] = {"id": next_url, "type": "OrderedCollectionPage"}
+    if start_index is not None:
+        page["startIndex"] = start_index
+    page["orderedItems"] = activities
+    return page
 
 
 class IIIFObject(object):
