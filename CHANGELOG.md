@@ -14,6 +14,41 @@ dates are the commit dates of the corresponding version bump.
 ## [Unreleased]
 
 ### Added
+- **Web Annotations & Content Search 2.0 (transcriptions, OCR, search-within).**
+  A shared frozen `Annotation` dataclass (or plain dict; `resolve_annotation`
+  normalizes both) is the one hit/annotation type for two paired, opt-in,
+  model-free features:
+  - `IIIF_ANNOTATIONS_BACKEND` — a callable `(identifier, request) -> iterable`
+    of annotations — powers `serve_annotation_page` at
+    `/iiif/<identifier>/annotations/1` (a W3C `AnnotationPage` of
+    transcriptions/OCR/commentary targeting the image's canvas), and
+    `serve_manifest` gains the canvas `annotations` reference when it is set.
+  - `IIIF_SEARCH_BACKEND` — a callable `(identifier, q, request) -> iterable` of
+    hits — powers `serve_search` at `/iiif/<identifier>/search?q=` (a Content
+    Search 2.0 `AnnotationPage` with embedded hits and a `contextualizing`
+    match block), and `serve_manifest` advertises a `SearchService2`. When only
+    the annotations backend is set, `serve_search` falls back to a
+    case-insensitive substring filter over it — "serve annotations, get search
+    for free." Empty/missing `q` ⇒ empty page; unset backends ⇒ 404.
+
+  New public builders: `build_annotation`, `build_annotation_page`,
+  `build_search_service`, `build_search_response`. Advertisement is view-only
+  (`IIIFObject.manifest` is unchanged). See `briefs/WEB-ANNOTATIONS.md` and
+  `briefs/CONTENT-SEARCH.md`.
+- **IIIF Change Discovery API 1.0 activity stream (harvestable collections).** A
+  new opt-in `IIIF_ACTIVITY_SOURCE` setting — a callable (or dotted-path string)
+  returning an iterable of activity entries (plain dicts or the new frozen
+  `Activity` dataclass; `object_id` + `end_time`, optional `type`/`object_type`,
+  normalized by `resolve_activity`) — powers two drop-in views mounted by
+  `djiiif.urls`: `serve_activity_collection` at `/iiif/activity/collection` (the
+  `OrderedCollection` entry point) and `serve_activity_page` at
+  `/iiif/activity/page/<n>` (paged `OrderedCollectionPage`s in ascending
+  `endTime` order). Page size from `IIIF_ACTIVITY_PAGE_SIZE` (default 100);
+  pagination via `django.core.paginator` (querysets slice lazily, generators are
+  materialized). Level-1 conformance (`Create`/`Update`); `Delete`/level-2 is
+  future work. Module-level builders `build_activity` /
+  `build_ordered_collection` / `build_collection_page` are public. Unset
+  `IIIF_ACTIVITY_SOURCE` ⇒ the activity URLs 404. See `briefs/CHANGE-DISCOVERY.md`.
 - **Richer Presentation 3.0 manifests — descriptive properties.** `build_manifest`
   now accepts optional keyword descriptors `metadata`, `rights`,
   `required_statement`, `summary`, `thumbnail`, and `nav_date` (each emitted only

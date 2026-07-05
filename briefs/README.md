@@ -15,25 +15,25 @@ Docs & compatibility → References. Status is tracked in each brief's header.
   metadata (`IIIF_MANIFEST_DESCRIPTORS`), multi-image manifests
   (`build_multi_manifest`), and Collections (`build_collection` +
   `serve_collection`). Implemented on `presentation-enrichment` (unreleased).
+- [CHANGE-DISCOVERY](CHANGE-DISCOVERY.md) — Change Discovery API 1.0 activity
+  stream (`IIIF_ACTIVITY_SOURCE` + `serve_activity_collection` /
+  `serve_activity_page`); makes a Django site harvestable by aggregators.
+  Implemented on `change-discovery` (unreleased).
+- [WEB-ANNOTATIONS](WEB-ANNOTATIONS.md) + [CONTENT-SEARCH](CONTENT-SEARCH.md) —
+  the shared `Annotation` dataclass, `IIIF_ANNOTATIONS_BACKEND` +
+  `serve_annotation_page`, and `IIIF_SEARCH_BACKEND` + `serve_search` (with the
+  substring fallback over the annotations backend). Co-landed on
+  `annotations-search` (unreleased).
 
 ## Proposed — IIIF API expansion (2026-07)
 
-The five remaining are opt-in and backwards-compatible (no MAJOR bump). All open
+The two remaining are opt-in and backwards-compatible (no MAJOR bump). All open
 questions were resolved 2026-07-03; each brief carries a Decisions section and
 is ready to implement. Suggested sequencing, smallest/highest-leverage first:
 
-1. [CHANGE-DISCOVERY](CHANGE-DISCOVERY.md) — Change Discovery API 1.0 activity
-   stream; makes a Django site harvestable by aggregators.
-2. [WEB-ANNOTATIONS](WEB-ANNOTATIONS.md) — serve W3C AnnotationPages
-   (transcriptions/OCR/commentary) referenced from manifests. Defines the
-   shared `Annotation` dataclass; implement before CONTENT-SEARCH.
-3. [CONTENT-SEARCH](CONTENT-SEARCH.md) — Content Search API 2.0 endpoint over a
-   pluggable backend, with a free substring-search fallback over the
-   WEB-ANNOTATIONS backend. Prefer co-landing with WEB-ANNOTATIONS in one
-   release.
-4. [NAVPLACE-GEO](NAVPLACE-GEO.md) — navPlace extension with GeoDjango
+1. [NAVPLACE-GEO](NAVPLACE-GEO.md) — navPlace extension with GeoDjango
    geometry pass-through. Niche but distinctive.
-5. [INFO-JSON-ENRICHMENT](INFO-JSON-ENRICHMENT.md) — declarative `sizes` /
+2. [INFO-JSON-ENRICHMENT](INFO-JSON-ENRICHMENT.md) — declarative `sizes` /
    `tiles` / limits / rights in the generated `info.json`.
 
 Cross-cutting conventions settled across the briefs:

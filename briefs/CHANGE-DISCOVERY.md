@@ -1,7 +1,7 @@
 # CHANGE-DISCOVERY — IIIF Change Discovery API 1.0 activity stream (harvestable collections)
 
-**Status:** Proposed — all questions resolved, ready to implement
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `change-discovery`
+**Branch:** `change-discovery`
 **Date:** 2026-07-03
 
 ## Problem

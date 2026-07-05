@@ -266,6 +266,79 @@ collection = build_collection(album.iiif_url, items, label=album.title)
 
 Each item is `(manifest_url, label)` (optionally a third `thumbnail`). To serve one directly, set `IIIF_COLLECTION_SOURCE` to a callable returning such items — it is exposed at `/iiif/collection` by `djiiif.urls` (unset ⇒ 404; `IIIF_COLLECTION_LABEL` sets the label). The response references manifests by URL only, so it stays small even for thousands of items.
 
+### Make your collection harvestable (Change Discovery)
+
+To let aggregators, portals, and search indexes discover *what changed since they last looked*, djiiif can serve a [IIIF Change Discovery API 1.0](https://iiif.io/api/discovery/1.0/) activity stream — the IIIF equivalent of a sitemap + RSS for your manifests. It's a natural fit for Django: the stream is just a queryset ordered by a modified timestamp, paginated.
+
+Point `IIIF_ACTIVITY_SOURCE` at a callable (or a dotted-path string) that yields one entry per resource, **in ascending `end_time` order**:
+
+```python
+# settings.py
+IIIF_ACTIVITY_SOURCE = "myapp.iiif.activities"
+
+# myapp/iiif.py
+def activities():
+    for photo in Photo.objects.exclude(image="").order_by("modified"):
+        yield {
+            "object_id": f"https://example.org/iiif/{photo.slug}/manifest",
+            "end_time": photo.modified,          # an aware datetime
+        }
+```
+
+Each entry is a plain dict (or an `Activity` dataclass) with `object_id` and `end_time`, plus optional `type` (`"Update"` default, or `"Create"`) and `object_type` (`"Manifest"` default, or `"Collection"`). With `djiiif.urls` mounted, the stream is served at:
+
+- `/iiif/activity/collection` — the `OrderedCollection` entry point (harvesters start here and follow `first`/`last`/`next`).
+- `/iiif/activity/page/<n>` — the `OrderedCollectionPage`s.
+
+Page size comes from `IIIF_ACTIVITY_PAGE_SIZE` (default 100). Returning a **queryset** (rather than a generator) lets pages slice lazily in the database — the recommended shape for large collections. Ordering is trusted, not re-sorted, so the source must yield ascending by `end_time`. Unset `IIIF_ACTIVITY_SOURCE` ⇒ the activity URLs 404.
+
+This is level-1 conformance (`Update`/`Create` with timestamps — enough for incremental harvest). `Delete` tracking (level 2) would require a persisted tombstone log and is future work.
+
+### Transcriptions & annotations
+
+Manifests can reference [W3C Web Annotations](https://www.w3.org/TR/annotation-model/) — transcriptions, OCR text, translations, scholarly commentary — that viewers like Mirador overlay on the image. Point `IIIF_ANNOTATIONS_BACKEND` at a callable `(identifier, request)` yielding one annotation per item; djiiif ships no annotation model, so storage stays yours:
+
+```python
+# settings.py
+IIIF_ANNOTATIONS_BACKEND = "myapp.iiif.annotations"
+
+# myapp/iiif.py
+from urllib.parse import unquote
+
+def annotations(identifier, request):
+    name = unquote(identifier)
+    for t in Transcription.objects.filter(photo__image=name):
+        yield {"text": t.text, "xywh": t.region, "language": t.lang}
+```
+
+Each entry is a plain dict (or the `Annotation` dataclass) with `text` (a string, or a preformed `body` dict), and optional `motivation` (default `"supplementing"`), `xywh`, `language`, `format`, and `id`. With `djiiif.urls` mounted, the page is served at `/iiif/<identifier>/annotations/1` and the generated manifest's canvas gains an `annotations` reference to it. Unset ⇒ 404.
+
+### Search inside your objects
+
+When a manifest advertises a [Content Search 2.0](https://iiif.io/api/search/2.0/) service, viewers can search *within* the object and highlight matching regions. Point `IIIF_SEARCH_BACKEND` at a callable `(identifier, q, request)` yielding hits — each an annotation plus optional snippet context:
+
+```python
+# settings.py
+IIIF_SEARCH_BACKEND = "myapp.iiif.search_ocr"
+
+# myapp/iiif.py
+from urllib.parse import unquote
+
+def search_ocr(identifier, q, request):
+    name = unquote(identifier)
+    for word in OcrWord.objects.filter(page__image=name, text__search=q):
+        yield {
+            "text": word.text,
+            "canvas_id": f"{request.build_absolute_uri('/iiif/')}{identifier}/canvas/1",
+            "xywh": f"{word.x},{word.y},{word.w},{word.h}",
+            "exact": word.text, "before": word.prefix, "after": word.suffix,  # optional snippet
+        }
+```
+
+The endpoint is `/iiif/<identifier>/search?q=...`, and `serve_manifest` advertises the `SearchService2` automatically. A missing or empty `q` returns a valid empty page (never the whole corpus); unrecognized spec parameters (`motivation`/`date`/`user`) are echoed in `ignored`.
+
+**Free search from your annotations:** if you set `IIIF_ANNOTATIONS_BACKEND` but no `IIIF_SEARCH_BACKEND`, `serve_search` falls back to a case-insensitive substring match over your annotations — so serving transcriptions gives you working search with no extra code. A dedicated `IIIF_SEARCH_BACKEND` (e.g. Postgres full-text search) overrides the fallback. With neither set, the search URL 404s.
+
 ### Serving info.json and manifests from Django
 
 djiiif can also serve the `info.json` and `manifest` documents itself — no separate image server is required for the metadata. Include its URLconf:
