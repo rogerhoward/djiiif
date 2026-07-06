@@ -14,6 +14,18 @@ dates are the commit dates of the corresponding version bump.
 ## [Unreleased]
 
 ### Added
+- **Declarative `info.json` enrichment.** A new opt-in `IIIF_INFO` setting — a
+  `dict`, the typed `InfoExtras` dataclass, or a callable returning either/`None`
+  (normalized by `resolve_info`, mirroring `IIIF_AUTH`) — passes optional Image
+  API properties through into the generated `info.json`: `sizes`, `tiles`,
+  `max_width`/`max_height`/`max_area`, `rights`, `preferred_formats`, and
+  `extra_qualities`/`extra_formats`/`extra_features`. Keys are accepted in both
+  snake_case and spec camelCase (conflicting duplicates raise
+  `ImproperlyConfigured`); v3 emits all of them, v2 emits only `sizes`/`tiles`
+  and rejects v3-only keys. Threaded through `iiif.info_document` and
+  `serve_info_json` (where a per-image callable receives the decoded storage
+  name). djiiif only advertises what the operator declares — it does not probe
+  the image server. Unset ⇒ output unchanged. See `briefs/INFO-JSON-ENRICHMENT.md`.
 - **Comprehensive documentation on Read the Docs.** A multi-page Sphinx site
   (MyST Markdown + Furo theme) under `docs/`, with getting-started guides, a
   feature guide per API, a full settings reference, and an autodoc API reference

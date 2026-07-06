@@ -13,7 +13,11 @@ Optionally, ``settings.IIIF_AUTH`` describes an IIIF Authorization Flow 2.0 prob
 service (a :class:`ProbeService`, a ``dict``, or a callable returning either or
 ``None``); when set, its ``service`` block is embedded in the generated
 ``info_document`` / ``manifest`` for access-controlled images (see
-:func:`resolve_auth`).
+:func:`resolve_auth`). ``settings.IIIF_INFO`` (a ``dict``, an :class:`InfoExtras`,
+or a callable → either/``None``) declares optional Image API ``info.json``
+properties — ``sizes``, ``tiles``, size limits, ``rights``, and v3 capability
+lists — that djiiif passes through into the generated document (see
+:func:`resolve_info`).
 
 The module also provides IIIF Content State API 1.0 helpers
 (:func:`encode_content_state` / :func:`decode_content_state` /
@@ -34,7 +38,7 @@ project-owned ``IIIF_ANNOTATIONS_BACKEND`` / ``IIIF_SEARCH_BACKEND`` callables.
 
 import base64
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 from functools import cached_property
 from urllib.parse import quote, unquote
@@ -423,6 +427,169 @@ def _require_auth_v3(auth: dict | None, version: int) -> None:
         )
 
 
+# Optional ``info.json`` properties, in canonical snake_case → emitted spec key.
+# Iteration order is the spec-conventional grouping (sizes/tiles, then limits,
+# then rights, then the extra-capability lists), used when emitting.
+INFO_KEYS: dict[str, str] = {
+    "sizes": "sizes",
+    "tiles": "tiles",
+    "max_width": "maxWidth",
+    "max_height": "maxHeight",
+    "max_area": "maxArea",
+    "rights": "rights",
+    "preferred_formats": "preferredFormats",
+    "extra_qualities": "extraQualities",
+    "extra_formats": "extraFormats",
+    "extra_features": "extraFeatures",
+}
+
+# The v3-only keys (everything except sizes/tiles, which v2 shares).
+_INFO_V2_KEYS = frozenset({"sizes", "tiles"})
+
+# spec camelCase alias → canonical snake_case (so spec-literal keys are accepted).
+_INFO_ALIASES: dict[str, str] = {
+    emitted: canonical for canonical, emitted in INFO_KEYS.items() if emitted != canonical
+}
+
+
+@dataclass(frozen=True)
+class InfoExtras:
+    """Typed, opt-in optional ``info.json`` properties (a dual-shape helper).
+
+    A structured alternative to a raw ``dict`` for ``IIIF_INFO`` (the
+    ``Profile``/``ProbeService`` precedent), with one field per optional Image
+    API property. Every field defaults to ``None`` and is emitted only when set.
+    djiiif does not verify these against the real image server — the operator
+    declares what their server supports and djiiif advertises it.
+
+    Attributes:
+        sizes: Preferred complete-image sizes (``[{"width": …, "height": …}]``).
+        tiles: Tile descriptions (``[{"width": …, "scaleFactors": [...]}]``).
+        max_width / max_height / max_area: Server-enforced size limits.
+        rights: A license/rights URI (v3).
+        preferred_formats: Preferred output formats (v3).
+        extra_qualities / extra_formats / extra_features: Capabilities beyond the
+            compliance level (v3).
+    """
+
+    sizes: list[dict] | None = None
+    tiles: list[dict] | None = None
+    max_width: int | None = None
+    max_height: int | None = None
+    max_area: int | None = None
+    rights: str | None = None
+    preferred_formats: list[str] | None = None
+    extra_qualities: list[str] | None = None
+    extra_formats: list[str] | None = None
+    extra_features: list[str] | None = None
+
+    def as_dict(self) -> dict:
+        """Return the set (non-``None``) fields as a canonical-key ``dict``."""
+        return {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if getattr(self, f.name) is not None
+        }
+
+
+def _normalize_info_keys(info: dict) -> dict:
+    """Normalize an ``IIIF_INFO`` dict to canonical snake_case keys.
+
+    Accepts both snake_case (``max_width``) and spec-literal camelCase
+    (``maxWidth``) keys, normalized to the snake_case form used internally.
+
+    Args:
+        info: The raw ``IIIF_INFO`` dict.
+
+    Returns:
+        A dict keyed by canonical snake_case names.
+
+    Raises:
+        ImproperlyConfigured: If a key is unrecognized, or the same property is
+            given under both its snake_case and camelCase spellings.
+    """
+    normalized: dict = {}
+    for key, value in info.items():
+        if key in INFO_KEYS:
+            canonical = key
+        elif key in _INFO_ALIASES:
+            canonical = _INFO_ALIASES[key]
+        else:
+            raise ImproperlyConfigured(
+                f"Unknown IIIF_INFO key {key!r}. Allowed keys: {', '.join(INFO_KEYS)}."
+            )
+        if canonical in normalized:
+            raise ImproperlyConfigured(
+                f"IIIF_INFO gives {canonical!r} under both its snake_case and camelCase "
+                "spellings; supply it once."
+            )
+        normalized[canonical] = value
+    return normalized
+
+
+def resolve_info(parent) -> dict:
+    """Resolve ``settings.IIIF_INFO`` to a normalized extras ``dict`` for an image.
+
+    Mirrors :func:`resolve_auth`: the setting may be a ``dict``, an
+    :class:`InfoExtras`, a callable returning either (or ``None``), or unset.
+
+    Args:
+        parent: The value passed to a callable config. On model paths this is the
+            :class:`IIIFFieldFile`; on view paths it is the decoded storage name
+            (``str``) — both expose the identity a callable branches on. The
+            documented callable signature is therefore ``parent: IIIFFieldFile | str``.
+
+    Returns:
+        A normalized extras dict (empty when unset or resolved to ``None``).
+
+    Raises:
+        ImproperlyConfigured: If the (resolved) value is not a ``dict``,
+            ``InfoExtras``, or ``None``, or carries an unknown/duplicate key.
+    """
+    info = getattr(settings, "IIIF_INFO", None)
+    if info is None:
+        return {}
+    if callable(info):
+        info = info(parent)
+    if info is None:
+        return {}
+    if isinstance(info, InfoExtras):
+        return info.as_dict()
+    if not isinstance(info, dict):
+        raise ImproperlyConfigured(
+            "IIIF_INFO must be a dict, InfoExtras, callable, or None, got "
+            f"{type(info).__name__}."
+        )
+    return _normalize_info_keys(info)
+
+
+def _apply_info_extras(document: dict, extras: dict, version: int) -> None:
+    """Emit resolved ``info.json`` extras into ``document`` for the API version.
+
+    v3 emits every present key at top level with its spec (camelCase) name, in
+    the spec-conventional order of :data:`INFO_KEYS`. v2 emits only ``sizes`` /
+    ``tiles`` and rejects any v3-only key.
+
+    Args:
+        document: The document being built; mutated in place.
+        extras: A normalized extras dict (canonical snake_case keys).
+        version: The resolved Image API version.
+
+    Raises:
+        ImproperlyConfigured: If a v3-only key is present at version 2.
+    """
+    if version == 2:
+        v3_only = sorted(set(extras) - _INFO_V2_KEYS)
+        if v3_only:
+            raise ImproperlyConfigured(
+                f"IIIF_INFO key(s) {', '.join(v3_only)} are only valid at "
+                "IIIF_IMAGE_API_VERSION 3; version 2 supports only sizes and tiles."
+            )
+    for canonical, emitted in INFO_KEYS.items():
+        if canonical in extras:
+            document[emitted] = extras[canonical]
+
+
 def build_info_document(
     id_url: str,
     width: int,
@@ -431,6 +598,7 @@ def build_info_document(
     version: int | None = None,
     level: str | None = None,
     auth: dict | None = None,
+    extras: dict | None = None,
 ) -> dict:
     """Build a spec-conformant IIIF Image API ``info.json`` document.
 
@@ -445,20 +613,24 @@ def build_info_document(
         auth: An optional resolved Authorization Flow 2.0 probe-service ``dict``
             (see :func:`resolve_auth`). When present it is added to the document's
             ``service`` array; only valid at version 3.
+        extras: An optional normalized extras dict (see :func:`resolve_info`) of
+            declarative properties — ``sizes``, ``tiles``, size limits, ``rights``,
+            preferred/extra capabilities. v2 accepts only ``sizes``/``tiles``.
 
     Returns:
         The ``info.json`` document as a dict, ready for ``JsonResponse``.
 
     Raises:
-        ImproperlyConfigured: If ``version`` is unknown, or ``auth`` is set while
-            not on version 3.
+        ImproperlyConfigured: If ``version`` is unknown, ``auth`` is set while not
+            on version 3, or an ``extras`` v3-only key is present at version 2.
     """
     version = _api_version(version)
     level = _compliance_level(level)
     _require_auth_v3(auth, version)
+    extras = extras or {}
 
     if version == 2:
-        return {
+        document = {
             "@context": IIIF_CONTEXTS[2],
             "@id": id_url,
             "protocol": "http://iiif.io/api/image",
@@ -466,6 +638,8 @@ def build_info_document(
             "width": width,
             "height": height,
         }
+        _apply_info_extras(document, extras, version)
+        return document
 
     document = {
         "@context": IIIF_CONTEXTS[3],
@@ -476,6 +650,7 @@ def build_info_document(
         "width": width,
         "height": height,
     }
+    _apply_info_extras(document, extras, version)
     if auth is not None:
         document["service"] = [auth]
     return document
@@ -1546,7 +1721,10 @@ class IIIFObject(object):
         never do. Shape is controlled by ``settings.IIIF_IMAGE_API_VERSION``
         (default ``3``) and ``settings.IIIF_COMPLIANCE_LEVEL`` (default
         ``"level2"``). When ``settings.IIIF_AUTH`` resolves to a probe service
-        for this image, its Authorization Flow 2.0 ``service`` block is included.
+        for this image, its Authorization Flow 2.0 ``service`` block is included;
+        when ``settings.IIIF_INFO`` resolves to extras for this image (see
+        :func:`resolve_info`), those declarative properties (``sizes``, ``tiles``,
+        limits, ``rights``, …) are emitted too.
 
         Returns:
             The ``info.json`` document, or ``None`` for an empty/unset field.
@@ -1558,6 +1736,7 @@ class IIIFObject(object):
             self._parent.width,
             self._parent.height,
             auth=resolve_auth(self._parent),
+            extras=resolve_info(self._parent),
         )
 
     @cached_property

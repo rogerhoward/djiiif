@@ -36,6 +36,11 @@ Image & Presentation documents
 .. autofunction:: build_multi_manifest
 .. autofunction:: build_collection
 
+.. autoclass:: InfoExtras
+   :members:
+
+.. autofunction:: resolve_info
+
 Content State
 -------------
 

@@ -22,6 +22,9 @@ changes until you configure it.
 * - `IIIF_COMPLIANCE_LEVEL`
   - `"level2"`
   - Compliance level advertised in `info_document` / manifest image service.
+* - `IIIF_INFO`
+  - unset
+  - `dict` / {class}`~djiiif.InfoExtras` / callable declaring optional `info.json` properties (`sizes`, `tiles`, size limits, `rights`, v3 capability lists). See {doc}`documents`.
 ```
 
 ## Presentation & collections
