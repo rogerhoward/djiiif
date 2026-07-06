@@ -1,7 +1,7 @@
 # INFO-JSON-ENRICHMENT — richer generated `info.json` (sizes, tiles, limits, rights)
 
-**Status:** Proposed — all questions resolved, ready to implement
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `info-json-enrichment`
+**Branch:** `info-json-enrichment`
 **Date:** 2026-07-03
 
 ## Problem

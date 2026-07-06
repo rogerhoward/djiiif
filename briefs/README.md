@@ -24,17 +24,18 @@ Docs & compatibility → References. Status is tracked in each brief's header.
   `serve_annotation_page`, and `IIIF_SEARCH_BACKEND` + `serve_search` (with the
   substring fallback over the annotations backend). Co-landed on
   `annotations-search` (unreleased).
+- [INFO-JSON-ENRICHMENT](INFO-JSON-ENRICHMENT.md) — declarative `sizes` /
+  `tiles` / limits / `rights` in the generated `info.json` (`IIIF_INFO` +
+  `InfoExtras`). Implemented on `info-json-enrichment` (unreleased).
 
 ## Proposed — IIIF API expansion (2026-07)
 
-The two remaining are opt-in and backwards-compatible (no MAJOR bump). All open
-questions were resolved 2026-07-03; each brief carries a Decisions section and
-is ready to implement. Suggested sequencing, smallest/highest-leverage first:
+One remains — opt-in and backwards-compatible (no MAJOR bump). All open
+questions were resolved 2026-07-03; the brief carries a Decisions section and
+is ready to implement:
 
 1. [NAVPLACE-GEO](NAVPLACE-GEO.md) — navPlace extension with GeoDjango
    geometry pass-through. Niche but distinctive.
-2. [INFO-JSON-ENRICHMENT](INFO-JSON-ENRICHMENT.md) — declarative `sizes` /
-   `tiles` / limits / rights in the generated `info.json`.
 
 Cross-cutting conventions settled across the briefs:
 

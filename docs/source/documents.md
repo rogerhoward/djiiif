@@ -103,5 +103,47 @@ IIIF_IMAGE_API_VERSION = 2
 IIIF_COMPLIANCE_LEVEL = "level1"
 ```
 
+## Enriching info.json
+
+The default `info.json` is deliberately minimal. Set **`IIIF_INFO`** to advertise
+the optional Image API properties your image server actually supports — preferred
+`sizes`, `tiles` for deep-zoom clients, server size limits, a `rights` URI, and
+v3 capability lists:
+
+```{code-block} python
+:caption: settings.py
+IIIF_INFO = {
+    "tiles": [{"width": 512, "scaleFactors": [1, 2, 4, 8]}],
+    "max_width": 5000,
+    "rights": "http://creativecommons.org/licenses/by/4.0/",
+    "preferred_formats": ["webp", "jpg"],
+}
+```
+
+Keys may be snake_case (above) or spec camelCase (`maxWidth`,
+`preferredFormats`, …) — supply each property once; giving both spellings raises
+`ImproperlyConfigured`. For per-image values, use a callable — it receives the
+`IIIFFieldFile` on the model path and the decoded storage **name** (a `str`) on
+the view path:
+
+```{code-block} python
+:caption: settings.py
+def info_extras(parent):
+    w, h = parent.width, parent.height
+    return {"sizes": [{"width": w // f, "height": h // f} for f in (8, 4, 2, 1)]}
+
+IIIF_INFO = info_extras
+```
+
+The `InfoExtras` dataclass is a typed alternative to the dict. At
+`IIIF_IMAGE_API_VERSION = 2` only `sizes`/`tiles` are accepted (v3-only keys
+raise `ImproperlyConfigured`). Unset ⇒ output unchanged.
+
+:::{important}
+These are **declarations, not measurements**. djiiif emits exactly what you
+configure and never probes the image server, so the values must match what that
+server really does (its tile size, its maximum request dimensions, …).
+:::
+
 Rather than writing these views yourself, you can mount djiiif's
 {doc}`drop-in views <serving>`.

@@ -105,6 +105,33 @@ Because it needs real pixel dimensions, accessing `.info_document` reads the ima
 - `IIIF_IMAGE_API_VERSION` — `3` (default) emits an Image API 3.0 document (`id` / `type: ImageService3`); `2` emits a 2.x document (`@id` / `profile` array).
 - `IIIF_COMPLIANCE_LEVEL` — the advertised compliance level, default `"level2"`.
 
+#### Enriching info.json (`sizes`, `tiles`, limits, `rights`)
+
+By default `info_document` is minimal. Set `IIIF_INFO` to advertise the optional Image API properties your image server actually supports — preferred `sizes`, `tiles` for deep-zoom clients, server size limits, a `rights` URI, and v3 capability lists:
+
+```python
+IIIF_INFO = {
+    "tiles": [{"width": 512, "scaleFactors": [1, 2, 4, 8]}],
+    "max_width": 5000,
+    "rights": "http://creativecommons.org/licenses/by/4.0/",
+    "preferred_formats": ["webp", "jpg"],
+}
+```
+
+Keys may be snake_case (above) or spec camelCase (`maxWidth`, `preferredFormats`, …) — pick one per property; giving both raises `ImproperlyConfigured`. Use a callable for per-image values (e.g. `sizes` derived from the stored dimensions):
+
+```python
+def info_extras(parent):                 # parent: IIIFFieldFile (model) or str name (view)
+    w, h = parent.width, parent.height
+    return {"sizes": [{"width": w // f, "height": h // f} for f in (8, 4, 2, 1)]}
+
+IIIF_INFO = info_extras
+```
+
+The `InfoExtras` dataclass is a typed alternative to the dict. At `IIIF_IMAGE_API_VERSION = 2` only `sizes`/`tiles` are allowed (v3-only keys raise `ImproperlyConfigured`). Unset ⇒ output unchanged.
+
+> **These are declarations, not measurements.** djiiif emits exactly what you configure; it does not probe your image server, so the values must match what that server really does (its tile size, its max request dimensions, …).
+
 ### Typed profiles
 
 As of version 0.24, instead of a raw `dict` you can use the `Profile` dataclass, which carries IIIF Image API 3.0-friendly defaults (`size="max"`) and validates its fields:

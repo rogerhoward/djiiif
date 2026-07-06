@@ -39,6 +39,7 @@ from djiiif import (
     build_search_service,
     resolve_activity,
     resolve_annotation,
+    resolve_info,
     urljoin,
 )
 
@@ -96,7 +97,10 @@ def serve_info_json(request, identifier):
 
     The document's ``id`` is taken from the request URL (minus the
     ``/info.json`` suffix) so it always matches the URL the document is served
-    from, as the spec requires.
+    from, as the spec requires. When ``settings.IIIF_INFO`` is configured, its
+    declarative extras are threaded in; a per-image ``IIIF_INFO`` callable
+    receives the **decoded storage name** here (there is no field file on the
+    view path — see :func:`djiiif.resolve_info`).
 
     Args:
         request: The incoming ``HttpRequest``.
@@ -108,9 +112,9 @@ def serve_info_json(request, identifier):
     Raises:
         Http404: If the identifier does not resolve to a readable image.
     """
-    _name, width, height = _load_dimensions(identifier)
+    name, width, height = _load_dimensions(identifier)
     id_url = request.build_absolute_uri(request.path).rsplit("/info.json", 1)[0]
-    return _ld_json(build_info_document(id_url, width, height))
+    return _ld_json(build_info_document(id_url, width, height, extras=resolve_info(name)))
 
 
 def serve_manifest(request, identifier):
