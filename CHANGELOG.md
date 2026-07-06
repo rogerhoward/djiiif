@@ -13,6 +13,8 @@ dates are the commit dates of the corresponding version bump.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-06
+
 ### Added
 - **navPlace extension (geolocated manifests) via GeoDjango.** A new opt-in
   `IIIF_NAVPLACE` setting — a callable (or dotted-path string) receiving the
@@ -222,7 +224,8 @@ changes from 0.24; the bump to 1.0 signals maturity, not a break.
   `IIIF_PROFILES`-driven profile URLs (dict and callable shapes), and the
   `{% iiif %}` template tag.
 
-[Unreleased]: https://github.com/rogerhoward/djiiif/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/rogerhoward/djiiif/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/rogerhoward/djiiif/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/rogerhoward/djiiif/compare/v0.24...v1.0.0
 [0.24]: https://github.com/rogerhoward/djiiif/compare/v0.23...v0.24
 [0.23]: https://github.com/rogerhoward/djiiif/compare/0.14...v0.23
