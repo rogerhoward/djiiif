@@ -107,3 +107,40 @@ def album_items():
 IIIF_COLLECTION_SOURCE = album_items
 IIIF_COLLECTION_LABEL = "Example Album"
 ```
+
+## Geolocated manifests (navPlace)
+
+For images *of places*, the
+[navPlace extension](https://iiif.io/api/extension/navplace/) carries location
+data that map-aware viewers and aggregators can plot. Set `IIIF_NAVPLACE` to a
+callable returning a geometry per image, and djiiif adds a `navPlace` GeoJSON
+`FeatureCollection` to the manifest (switching its `@context` to the two-element
+navPlace array). It pairs naturally with
+[GeoDjango](https://docs.djangoproject.com/en/stable/ref/contrib/gis/):
+
+```{code-block} python
+:caption: settings.py
+IIIF_NAVPLACE = "myapp.iiif.navplace"
+```
+
+```{code-block} python
+:caption: myapp/iiif.py — Photo has location = models.PointField(null=True)
+def navplace(parent):
+    photo = parent.instance
+    if photo.location is None:
+        return None
+    return (photo.location, photo.place_name)   # (geometry, label)
+```
+
+The callable may return `None`, a GeoJSON `dict` (bare geometry, `Feature`, or
+`FeatureCollection`), a GEOS geometry, or a `(geometry, label)` pair. Features
+gain synthesized ids.
+
+:::{note}
+**GeoDjango is not a dependency.** The GEOS bridge lives in the optional
+`djiiif.geo` module, which recognizes geometries by duck-typing and never imports
+`django.contrib.gis` — projects without GDAL/GEOS use plain GeoJSON dicts and are
+unaffected. navPlace mandates WGS84, so a GEOS geometry whose SRID is set and
+isn't `4326` raises `ImproperlyConfigured` (reproject first with
+`geom.transform(4326, clone=True)`).
+:::

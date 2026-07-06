@@ -295,6 +295,26 @@ collection = build_collection(album.iiif_url, items, label=album.title)
 
 Each item is `(manifest_url, label)` (optionally a third `thumbnail`). To serve one directly, set `IIIF_COLLECTION_SOURCE` to a callable returning such items — it is exposed at `/iiif/collection` by `djiiif.urls` (unset ⇒ 404; `IIIF_COLLECTION_LABEL` sets the label). The response references manifests by URL only, so it stays small even for thousands of items.
 
+### Geolocated images (navPlace)
+
+For images *of places* — photographs, maps, architectural surveys — the [navPlace extension](https://iiif.io/api/extension/navplace/) carries location data that map-aware viewers and aggregators can plot. Set `IIIF_NAVPLACE` to a callable returning a geometry for each image, and djiiif adds a `navPlace` GeoJSON `FeatureCollection` to the generated manifest. It pairs naturally with [GeoDjango](https://docs.djangoproject.com/en/stable/ref/contrib/gis/), whose geometry fields serialize straight to GeoJSON:
+
+```python
+# settings.py
+IIIF_NAVPLACE = "myapp.iiif.navplace"
+
+# myapp/iiif.py — Photo has location = models.PointField(null=True)
+def navplace(parent):
+    photo = parent.instance
+    if photo.location is None:
+        return None
+    return (photo.location, photo.place_name)   # (geometry, label)
+```
+
+The callable may return `None` (no navPlace), a GeoJSON `dict` (a bare geometry, `Feature`, or `FeatureCollection`), a GEOS geometry, or a `(geometry, label)` pair. When present, the manifest's `@context` becomes the two-element navPlace array and Features gain synthesized ids.
+
+**GeoDjango is not a dependency.** The GEOS bridge lives in an optional `djiiif.geo` module that recognizes geometries by duck-typing — projects without GDAL/GEOS use plain GeoJSON dicts and are unaffected. navPlace mandates WGS84, so a GEOS geometry whose SRID is set and isn't `4326` raises `ImproperlyConfigured` (reproject first: `geom.transform(4326, clone=True)`).
+
 ### Make your collection harvestable (Change Discovery)
 
 To let aggregators, portals, and search indexes discover *what changed since they last looked*, djiiif can serve a [IIIF Change Discovery API 1.0](https://iiif.io/api/discovery/1.0/) activity stream — the IIIF equivalent of a sitemap + RSS for your manifests. It's a natural fit for Django: the stream is just a queryset ordered by a modified timestamp, paginated.
