@@ -45,6 +45,9 @@ changes until you configure it.
 * - `IIIF_COLLECTION_LABEL`
   - `"Collection"`
   - Label for the served collection.
+* - `IIIF_NAVPLACE`
+  - unset
+  - Callable / dotted-path returning a geometry (GeoJSON dict, GEOS geometry, `(geometry, label)`, or `None`) added to the manifest as `navPlace`. See {doc}`presentation`.
 ```
 
 ## Change Discovery

@@ -27,15 +27,13 @@ Docs & compatibility → References. Status is tracked in each brief's header.
 - [INFO-JSON-ENRICHMENT](INFO-JSON-ENRICHMENT.md) — declarative `sizes` /
   `tiles` / limits / `rights` in the generated `info.json` (`IIIF_INFO` +
   `InfoExtras`). Implemented on `info-json-enrichment` (unreleased).
+- [NAVPLACE-GEO](NAVPLACE-GEO.md) — navPlace extension with GeoDjango geometry
+  pass-through (`IIIF_NAVPLACE` + the optional `djiiif.geo` module). Implemented
+  on `navplace-geo` (unreleased).
 
 ## Proposed — IIIF API expansion (2026-07)
 
-One remains — opt-in and backwards-compatible (no MAJOR bump). All open
-questions were resolved 2026-07-03; the brief carries a Decisions section and
-is ready to implement:
-
-1. [NAVPLACE-GEO](NAVPLACE-GEO.md) — navPlace extension with GeoDjango
-   geometry pass-through. Niche but distinctive.
+All seven briefs are now implemented (unreleased). Nothing remains proposed.
 
 Cross-cutting conventions settled across the briefs:
 

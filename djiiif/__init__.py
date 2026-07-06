@@ -17,7 +17,9 @@ service (a :class:`ProbeService`, a ``dict``, or a callable returning either or
 or a callable → either/``None``) declares optional Image API ``info.json``
 properties — ``sizes``, ``tiles``, size limits, ``rights``, and v3 capability
 lists — that djiiif passes through into the generated document (see
-:func:`resolve_info`).
+:func:`resolve_info`). ``settings.IIIF_NAVPLACE`` (a callable → GeoJSON / GEOS
+geometry / ``None``, resolved by the optional :mod:`djiiif.geo` module) adds a
+navPlace ``FeatureCollection`` to the generated manifest for geolocated images.
 
 The module also provides IIIF Content State API 1.0 helpers
 (:func:`encode_content_state` / :func:`decode_content_state` /
@@ -56,6 +58,13 @@ IIIF_CONTEXTS: dict[int, str] = {
 
 # @context URI for a generated Presentation API manifest (always version 3).
 PRESENTATION_CONTEXT = "http://iiif.io/api/presentation/3/context.json"
+
+# @context array for a manifest carrying the navPlace extension — the extension
+# context first, the Presentation context last, as the extension requires.
+NAVPLACE_CONTEXT = [
+    "http://iiif.io/api/extension/navplace/context.json",
+    PRESENTATION_CONTEXT,
+]
 
 # Keys every fully-resolved profile spec must provide.
 PROFILE_KEYS = ("host", "region", "size", "rotation", "quality", "format")
@@ -943,6 +952,29 @@ def _build_canvas(
     return canvas
 
 
+def _navplace_with_feature_ids(nav_place: dict, manifest_id: str) -> dict:
+    """Return a copy of a navPlace FeatureCollection with feature ids filled in.
+
+    The navPlace extension recommends an ``id`` on each Feature; any Feature
+    lacking one gets a synthesized ``{manifest_id}/navplace/feature/{n}`` id
+    (1-based), matching djiiif's synthetic-URI scheme. Caller data is not mutated
+    — the Features are shallow-copied first.
+
+    Args:
+        nav_place: The resolved navPlace ``FeatureCollection`` dict.
+        manifest_id: The manifest URI, the stem for synthesized Feature ids.
+
+    Returns:
+        A new ``FeatureCollection`` dict with every Feature carrying an ``id``.
+    """
+    features = []
+    for index, feature in enumerate(nav_place.get("features", []), start=1):
+        feature = dict(feature)
+        feature.setdefault("id", urljoin([manifest_id, "navplace", "feature", str(index)]))
+        features.append(feature)
+    return {**nav_place, "features": features}
+
+
 def build_multi_manifest(
     id_url: str,
     images,
@@ -951,6 +983,7 @@ def build_multi_manifest(
     version: int | None = None,
     level: str | None = None,
     auth: dict | None = None,
+    nav_place: dict | None = None,
     **descriptors,
 ) -> dict:
     """Build a multi-canvas IIIF Presentation API 3.0 Manifest.
@@ -973,6 +1006,10 @@ def build_multi_manifest(
             ``settings.IIIF_COMPLIANCE_LEVEL`` (``"level2"``).
         auth: An optional resolved Authorization Flow 2.0 probe-service ``dict``
             applied to **every** image body; only valid at version 3.
+        nav_place: An optional GeoJSON ``FeatureCollection`` dict (see
+            :func:`djiiif.geo.resolve_navplace`) emitted as the manifest's
+            ``navPlace``. When present, ``@context`` becomes the two-element
+            navPlace array and Features gain synthesized ids.
         **descriptors: Optional descriptive properties (keys in
             :data:`DESCRIPTOR_KEYS`) emitted at the manifest top level.
 
@@ -1005,13 +1042,16 @@ def build_multi_manifest(
             )
         )
 
+    manifest_id = _manifest_uri(id_url)
     manifest = {
-        "@context": PRESENTATION_CONTEXT,
-        "id": _manifest_uri(id_url),
+        "@context": PRESENTATION_CONTEXT if nav_place is None else NAVPLACE_CONTEXT,
+        "id": manifest_id,
         "type": "Manifest",
         "label": _language_map(label),
     }
     manifest.update(_descriptive_properties(descriptors))
+    if nav_place is not None:
+        manifest["navPlace"] = _navplace_with_feature_ids(nav_place, manifest_id)
     manifest["items"] = canvases
     return manifest
 
@@ -1025,6 +1065,7 @@ def build_manifest(
     version: int | None = None,
     level: str | None = None,
     auth: dict | None = None,
+    nav_place: dict | None = None,
     **descriptors,
 ) -> dict:
     """Build a minimal single-image IIIF Presentation API 3.0 Manifest.
@@ -1049,6 +1090,9 @@ def build_manifest(
             (see :func:`resolve_auth`). When present it is added to the
             access-controlled image body's ``service`` array; only valid at
             version 3.
+        nav_place: An optional GeoJSON ``FeatureCollection`` (see
+            :func:`djiiif.geo.resolve_navplace`) emitted as the manifest's
+            ``navPlace``; switches ``@context`` to the navPlace array.
         **descriptors: Optional descriptive properties (keys in
             :data:`DESCRIPTOR_KEYS`) emitted at the manifest top level.
 
@@ -1066,6 +1110,7 @@ def build_manifest(
         version=version,
         level=level,
         auth=auth,
+        nav_place=nav_place,
         **descriptors,
     )
 
@@ -1751,13 +1796,18 @@ class IIIFObject(object):
         image body. When ``settings.IIIF_MANIFEST_DESCRIPTORS`` resolves to a
         descriptor bag for this image (see :func:`resolve_manifest_descriptors`),
         its descriptive properties (``metadata``, ``rights``, …) are emitted at
-        the manifest top level.
+        the manifest top level. When ``settings.IIIF_NAVPLACE`` resolves to a
+        geometry for this image (see :func:`djiiif.geo.resolve_navplace`), its
+        ``navPlace`` FeatureCollection is emitted (with the navPlace ``@context``).
 
         Returns:
             The manifest document, or ``None`` for an empty/unset field.
         """
         if not self.identifier:
             return None
+        # Imported lazily so the core module never imports the optional geo bridge.
+        from djiiif.geo import resolve_navplace
+
         label = self._parent.name.rsplit("/", 1)[-1]
         return build_manifest(
             self.identifier,
@@ -1765,6 +1815,7 @@ class IIIFObject(object):
             self._parent.height,
             label=label,
             auth=resolve_auth(self._parent),
+            nav_place=resolve_navplace(self._parent),
             **resolve_manifest_descriptors(self._parent),
         )
 

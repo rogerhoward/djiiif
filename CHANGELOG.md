@@ -14,6 +14,18 @@ dates are the commit dates of the corresponding version bump.
 ## [Unreleased]
 
 ### Added
+- **navPlace extension (geolocated manifests) via GeoDjango.** A new opt-in
+  `IIIF_NAVPLACE` setting — a callable (or dotted-path string) receiving the
+  field file and returning a GeoJSON dict, a GEOS geometry, a `(geometry, label)`
+  pair, or `None` — adds a [navPlace](https://iiif.io/api/extension/navplace/)
+  `FeatureCollection` to the generated manifest, switching its `@context` to the
+  required two-element array. Resolution lives in a new **optional** `djiiif.geo`
+  module that recognizes GEOS geometries by duck-typing (never importing
+  `django.contrib.gis`), so GeoDjango is **not** a dependency — plain GeoJSON
+  works without GDAL/GEOS. `build_manifest`/`build_multi_manifest` gain a
+  `nav_place` keyword; `IIIFObject.manifest` and `serve_manifest` thread it
+  through. A GEOS geometry whose SRID is set and not 4326 (WGS84) raises
+  `ImproperlyConfigured`. Unset ⇒ output unchanged. See `briefs/NAVPLACE-GEO.md`.
 - **Declarative `info.json` enrichment.** A new opt-in `IIIF_INFO` setting — a
   `dict`, the typed `InfoExtras` dataclass, or a callable returning either/`None`
   (normalized by `resolve_info`, mirroring `IIIF_AUTH`) — passes optional Image

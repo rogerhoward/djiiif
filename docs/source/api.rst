@@ -41,6 +41,11 @@ Image & Presentation documents
 
 .. autofunction:: resolve_info
 
+Geolocation (navPlace)
+----------------------
+
+.. autofunction:: djiiif.geo.resolve_navplace
+
 Content State
 -------------
 

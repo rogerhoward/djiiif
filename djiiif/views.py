@@ -42,6 +42,7 @@ from djiiif import (
     resolve_info,
     urljoin,
 )
+from djiiif.geo import resolve_navplace
 
 
 def _load_dimensions(identifier: str) -> tuple[str, int, int]:
@@ -128,7 +129,10 @@ def serve_manifest(request, identifier):
     ``annotations`` reference to this image's AnnotationPage; when a search
     backend is available (a dedicated ``IIIF_SEARCH_BACKEND`` or the annotations
     fallback), the manifest advertises a ``SearchService2``. Both are view-only —
-    ``IIIFObject.manifest`` (no request in scope) emits neither.
+    ``IIIFObject.manifest`` (no request in scope) emits neither. When
+    ``IIIF_NAVPLACE`` is configured its callable receives the decoded storage
+    name here (no field file on the view path) and its geometry is emitted as
+    ``navPlace``.
 
     Args:
         request: The incoming ``HttpRequest``.
@@ -143,7 +147,7 @@ def serve_manifest(request, identifier):
     name, width, height = _load_dimensions(identifier)
     id_url = request.build_absolute_uri(request.path).rsplit("/manifest", 1)[0]
     label = name.rsplit("/", 1)[-1]
-    manifest = build_manifest(id_url, width, height, label=label)
+    manifest = build_manifest(id_url, width, height, label=label, nav_place=resolve_navplace(name))
 
     if _resolve_backend("IIIF_ANNOTATIONS_BACKEND") is not None:
         manifest["items"][0]["annotations"] = [

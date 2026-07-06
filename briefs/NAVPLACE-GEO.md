@@ -1,7 +1,7 @@
 # NAVPLACE-GEO — navPlace extension via GeoDjango (geolocated manifests)
 
-**Status:** Proposed — all questions resolved, ready to implement
-**Branch:** _none yet (implementation branch TBD)_
+**Status:** Implemented (unreleased) — on `navplace-geo`
+**Branch:** `navplace-geo`
 **Date:** 2026-07-03
 
 ## Problem
