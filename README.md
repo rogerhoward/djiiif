@@ -1,5 +1,25 @@
 # djiiif
 
+> ## 📦 This repository has moved to GitLab
+>
+> **djiiif now lives at [gitlab.com/iiiris-org/djiiif](https://gitlab.com/iiiris-org/djiiif).**
+>
+> This GitHub repository is **archived and read-only**. It is kept in place so that
+> existing clones and inbound links keep resolving, but it will not receive further
+> commits, releases, or bug fixes.
+>
+> - **Issues and merge requests:** please file them on [GitLab](https://gitlab.com/iiiris-org/djiiif/-/issues).
+> - **Documentation:** [djiiif.readthedocs.io](https://djiiif.readthedocs.io/) (unchanged).
+> - **Installation:** `pip install djiiif` is **unchanged** — the package is still
+>   published to [PyPI](https://pypi.org/project/djiiif/) under the same name, and no
+>   code, import path, or public API changed in the move.
+>
+> To repoint an existing clone:
+>
+> ```bash
+> git remote set-url origin https://gitlab.com/iiiris-org/djiiif.git
+> ```
+
 djiiif is a package designed to make integrating the [IIIF Image API](https://iiif.io/api/image/3.0/) easier by extending Django's ImageField. By defining one or more named "profiles", your ImageFields expose IIIF-compatible URLs for each profile.
 
 📖 **Full documentation:** [djiiif.readthedocs.io](https://djiiif.readthedocs.io/) — guides for every feature, a settings reference, and the API reference. This README is the quickstart; the docs are the comprehensive reference.
